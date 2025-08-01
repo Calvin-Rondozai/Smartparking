@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from rest_framework import status, generics
+from rest_framework import status, generics, serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -289,10 +289,84 @@ class BookingList(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        return Booking.objects.filter(user=self.request.user)
+        user_bookings = Booking.objects.filter(user=self.request.user)
+        print(f"=== Fetching bookings for user {self.request.user.username} ===")
+        print(f"Found {user_bookings.count()} bookings")
+        
+        # Check for expired bookings and mark them as completed
+        for booking in user_bookings.filter(status='active'):
+            if booking.mark_as_completed_if_expired():
+                print(f"  - Marked expired booking {booking.id} as completed")
+        
+        # Refresh the queryset after potential status changes
+        user_bookings = Booking.objects.filter(user=self.request.user)
+        for booking in user_bookings:
+            print(f"  - Booking {booking.id}: {booking.parking_spot.spot_number} ({booking.status})")
+        return user_bookings
     
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        try:
+            print("=== Starting booking creation ===")
+            
+            # Check if user already has an active booking
+            existing_active_booking = Booking.objects.filter(
+                user=self.request.user, 
+                status='active'
+            ).first()
+            
+            if existing_active_booking:
+                print(f"User already has active booking: {existing_active_booking.id}")
+                raise serializers.ValidationError({
+                    'non_field_errors': 'You already have an active booking. Please cancel your current booking before making a new one.'
+                })
+            
+            # Get parking spot from parking_spot_id
+            parking_spot_id = serializer.validated_data.get('parking_spot_id')
+            print(f"Parking spot ID: {parking_spot_id}")
+            
+            try:
+                parking_spot = ParkingSpot.objects.get(id=parking_spot_id)
+                print(f"Found parking spot: {parking_spot.spot_number}")
+            except ParkingSpot.DoesNotExist:
+                print(f"Parking spot {parking_spot_id} not found")
+                raise serializers.ValidationError({
+                    'parking_spot_id': 'Parking spot not found.'
+                })
+            
+            # Check if the parking spot is available
+            if parking_spot.is_occupied:
+                print(f"Parking spot {parking_spot.spot_number} is occupied")
+                raise serializers.ValidationError({
+                    'parking_spot_id': 'This parking spot is currently occupied and cannot be booked.'
+                })
+            
+            # Mark the spot as occupied
+            parking_spot.is_occupied = True
+            parking_spot.save()
+            print(f"Marked {parking_spot.spot_number} as occupied")
+            
+            # Create the booking with minimal data
+            booking_data = {
+                'user': self.request.user,
+                'parking_spot': parking_spot,
+                'start_time': serializer.validated_data.get('start_time'),
+                'end_time': serializer.validated_data.get('end_time'),
+                'duration_minutes': serializer.validated_data.get('duration_minutes', 0),
+                'vehicle_name': serializer.validated_data.get('vehicle_name', ''),
+                'status': 'active'
+            }
+            
+            print(f"Creating booking with data: {booking_data}")
+            booking = Booking.objects.create(**booking_data)
+            print(f"✅ Booking created successfully: {booking.id}")
+            
+            return booking
+            
+        except Exception as e:
+            print(f"❌ Error in booking creation: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
 class BookingDetail(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = BookingSerializer
@@ -306,8 +380,13 @@ class BookingDetail(generics.RetrieveUpdateDestroyAPIView):
 def extend_booking(request, booking_id):
     """Extend booking duration"""
     try:
+        print(f"Extend booking called for booking {booking_id}")
+        print(f"Request data: {request.data}")
+        
         booking = Booking.objects.get(id=booking_id, user=request.user)
         additional_minutes = request.data.get('additional_minutes', 0)
+        
+        print(f"Additional minutes: {additional_minutes}")
         
         if additional_minutes <= 0:
             return Response({
@@ -319,12 +398,29 @@ def extend_booking(request, booking_id):
         booking.end_time += timedelta(minutes=additional_minutes)
         booking.duration_minutes += additional_minutes
         
-        # Recalculate cost
-        duration = booking.end_time - booking.start_time
-        hours = duration.total_seconds() / 3600
-        booking.total_cost = hours * booking.parking_spot.parking_lot.hourly_rate
+        # Recalculate cost safely
+        try:
+            duration = booking.end_time - booking.start_time
+            hours = duration.total_seconds() / 3600
+            
+            # Get hourly rate safely
+            if hasattr(booking.parking_spot, 'parking_lot') and booking.parking_spot.parking_lot:
+                if hasattr(booking.parking_spot.parking_lot, 'hourly_rate') and booking.parking_spot.parking_lot.hourly_rate:
+                    hourly_rate = float(booking.parking_spot.parking_lot.hourly_rate)
+                else:
+                    hourly_rate = 2.50  # Default rate
+            else:
+                hourly_rate = 2.50  # Default rate
+            
+            booking.total_cost = hours * hourly_rate
+        except Exception as e:
+            print(f"Error calculating total_cost: {e}")
+            # Set default cost if calculation fails
+            booking.total_cost = (booking.duration_minutes / 60) * 2.50
         
         booking.save()
+        
+        print(f"Booking extended successfully. New duration: {booking.duration_minutes} minutes")
         
         return Response({
             'message': 'Booking extended successfully',
@@ -335,6 +431,11 @@ def extend_booking(request, booking_id):
         return Response({
             'error': 'Booking not found'
         }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(f"Error in extend_booking: {e}")
+        return Response({
+            'error': 'Failed to extend booking'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -356,6 +457,30 @@ def cancel_booking(request, booking_id):
         parking_spot = booking.parking_spot
         parking_spot.is_occupied = False
         parking_spot.save()
+        
+        # Try to control ESP32 (but don't fail if it doesn't work)
+        try:
+            import requests
+            from iot_integration.models import IoTDevice
+            
+            # Find the IoT device
+            device = IoTDevice.objects.filter(is_active=True).first()
+            if device:
+                # Send booking control to ESP32
+                control_url = f"http://192.168.180.47:8000/api/iot/control/booking/"
+                control_data = {
+                    'device_id': device.device_id,
+                    'slot_number': parking_spot.spot_number,
+                    'is_booked': False
+                }
+                
+                response = requests.post(control_url, json=control_data, timeout=3)
+                if response.status_code == 200:
+                    print(f"✅ ESP32 booking control sent for {parking_spot.spot_number} (cancelled)")
+                else:
+                    print(f"⚠️ ESP32 booking control failed: {response.status_code} - but booking was cancelled")
+        except Exception as e:
+            print(f"⚠️ ESP32 booking control error: {e} - but booking was cancelled successfully")
         
         return Response({
             'message': 'Booking cancelled successfully'

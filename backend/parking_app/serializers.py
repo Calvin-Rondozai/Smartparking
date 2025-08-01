@@ -47,24 +47,6 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['total_cost', 'status']
 
-    def create(self, validated_data):
-        parking_spot_id = validated_data.pop('parking_spot_id')
-        parking_spot = ParkingSpot.objects.get(id=parking_spot_id)
-        
-        # Check if spot is available
-        if parking_spot.is_occupied:
-            raise serializers.ValidationError("This parking spot is already occupied")
-        
-        # Mark spot as occupied
-        parking_spot.is_occupied = True
-        parking_spot.save()
-        
-        booking = Booking.objects.create(
-            parking_spot=parking_spot,
-            **validated_data
-        )
-        return booking
-
 class PaymentSerializer(serializers.ModelSerializer):
     booking = BookingSerializer(read_only=True)
     booking_id = serializers.IntegerField(write_only=True)
