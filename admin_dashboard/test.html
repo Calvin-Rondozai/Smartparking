@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard Test</title>
+</head>
+<body>
+    <h1>Admin Dashboard Test</h1>
+    
+    <div>
+        <h2>Authentication Test</h2>
+        <p>Token: <span id="tokenStatus">Checking...</span></p>
+        <p>User: <span id="userStatus">Checking...</span></p>
+    </div>
+    
+    <div>
+        <h2>API Test</h2>
+        <button onclick="testBookings()">Test Bookings API</button>
+        <button onclick="testUsers()">Test Users API</button>
+        <div id="apiResults"></div>
+    </div>
+
+    <script>
+        // Test authentication
+        const token = localStorage.getItem('adminToken');
+        const user = localStorage.getItem('adminUser');
+        
+        document.getElementById('tokenStatus').textContent = token ? 'Present' : 'Missing';
+        document.getElementById('userStatus').textContent = user ? 'Present' : 'Missing';
+        
+        async function testBookings() {
+            const resultsDiv = document.getElementById('apiResults');
+            resultsDiv.innerHTML = '<p>Testing Bookings API...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/admin/bookings/', {
+                    headers: {
+                        'Authorization': `Token ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                resultsDiv.innerHTML = `
+                    <h3>Bookings API Response:</h3>
+                    <p>Status: ${response.status}</p>
+                    <p>Data: ${JSON.stringify(data, null, 2)}</p>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <h3>Bookings API Error:</h3>
+                    <p>Error: ${error.message}</p>
+                `;
+            }
+        }
+        
+        async function testUsers() {
+            const resultsDiv = document.getElementById('apiResults');
+            resultsDiv.innerHTML = '<p>Testing Users API...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/admin/users/', {
+                    headers: {
+                        'Authorization': `Token ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                resultsDiv.innerHTML = `
+                    <h3>Users API Response:</h3>
+                    <p>Status: ${response.status}</p>
+                    <p>Data: ${JSON.stringify(data, null, 2)}</p>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <h3>Users API Error:</h3>
+                    <p>Error: ${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

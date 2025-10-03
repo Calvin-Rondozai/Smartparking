@@ -21,9 +21,9 @@ class BookingAdmin(admin.ModelAdmin):
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'phone_number', 'license_plate', 'is_verified']
-    list_filter = ['is_verified', 'created_at']
-    search_fields = ['user__username', 'phone_number', 'license_plate']
+    list_display = ['user', 'phone', 'address', 'created_at']
+    list_filter = ['created_at']
+    search_fields = ['user__username', 'phone', 'address']
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
