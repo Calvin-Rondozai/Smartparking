@@ -87,6 +87,11 @@ urlpatterns = [
     # Admin endpoints
     path("admin/bookings/", views.get_all_bookings_admin, name="admin_bookings"),
     path("admin/users/", views.get_all_users_admin, name="admin_users"),
+    path(
+        "admin/users/negative-balance/",
+        views.get_negative_balance_users_admin,
+        name="admin_users_negative_balance",
+    ),
     path("admin/users/create/", views.create_user_admin, name="create_user_admin"),
     path(
         "admin/users/<int:user_id>/update/",

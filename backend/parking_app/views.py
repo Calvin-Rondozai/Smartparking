@@ -126,6 +126,28 @@ def deduct_from_wallet(user, booking, amount, note="Parking charge"):
             note=note,
         )
 
+        # Check if balance went negative and create admin alert
+        if new_balance < Decimal("0.00") and old_balance >= Decimal("0.00"):
+            from .models import UserReport
+            from django.utils import timezone
+
+            # Create alert for admin dashboard
+            alert_message = f"User {user.username} (ID: {user.id}) has negative balance: ${new_balance:.2f}. Overtime charges from parking session."
+            if booking:
+                alert_message += f" Booking ID: {booking.id}, Slot: {booking.parking_spot.spot_number if booking.parking_spot else 'Unknown'}"
+
+            UserReport.objects.create(
+                user=user,
+                message=alert_message,
+                type="system_alert",
+                priority="high",
+                status="pending",
+            )
+
+            print(
+                f"🚨 NEGATIVE BALANCE ALERT: User {user.username} balance: ${new_balance:.2f}"
+            )
+
         print(
             f"💰 Wallet deduction: User {user.id}, Amount: ${amount}, Old: ${old_balance}, New: ${new_balance}"
         )
@@ -3086,10 +3108,14 @@ def get_all_users_admin(request):
                 phone = profile.phone if profile else None
                 address = profile.address if profile else None
                 last_password_reset = profile.last_password_reset if profile else None
+                wallet_balance = (
+                    float(profile.balance) if profile and profile.balance else 0.0
+                )
             except:
                 phone = None
                 address = None
                 last_password_reset = None
+                wallet_balance = 0.0
 
             user_data.append(
                 {
@@ -3108,10 +3134,79 @@ def get_all_users_admin(request):
                     "last_password_reset": last_password_reset,
                     "total_bookings": total_bookings,
                     "total_spent": total_spent,
+                    "wallet_balance": wallet_balance,
                 }
             )
 
         return Response(user_data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_negative_balance_users_admin(request):
+    """Get users with negative wallet balances for admin users (superusers and staff)"""
+    try:
+        # Check if user is admin or staff
+        if not (request.user.is_superuser or request.user.is_staff):
+            return Response(
+                {"error": "Admin or staff access required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Get all users with negative balances
+        from django.contrib.auth import get_user_model
+        from django.db.models import Q
+
+        User = get_user_model()
+        users_with_negative_balance = (
+            User.objects.filter(profile__balance__lt=0)
+            .select_related("profile")
+            .order_by("profile__balance")
+        )
+
+        negative_users_data = []
+        for user in users_with_negative_balance:
+            try:
+                profile = user.profile
+                wallet_balance = (
+                    float(profile.balance) if profile and profile.balance else 0.0
+                )
+
+                # Get number plate from profile
+                number_plate = None
+                if profile and profile.address:
+                    # Extract number plate from address field (assuming format like "Number Plate|Address")
+                    if "|" in profile.address:
+                        parts = profile.address.split("|")
+                        number_plate = parts[0].strip() if parts[0].strip() else None
+                    else:
+                        # If no pipe separator, check if it looks like a number plate
+                        address = profile.address.strip()
+                        if len(address) <= 10 and any(c.isalnum() for c in address):
+                            number_plate = address
+
+                negative_users_data.append(
+                    {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "first_name": user.first_name or "",
+                        "last_name": user.last_name or "",
+                        "full_name": f"{user.first_name or ''} {user.last_name or ''}".strip()
+                        or user.username,
+                        "number_plate": number_plate or "N/A",
+                        "wallet_balance": wallet_balance,
+                        "date_joined": user.date_joined,
+                    }
+                )
+            except Exception as e:
+                print(f"Error processing user {user.username}: {e}")
+                continue
+
+        return Response(negative_users_data, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -6558,6 +6653,7 @@ def submit_user_report(request):
         # Print full traceback for debugging
         try:
             import traceback
+
             traceback.print_exc()
         except Exception:
             pass
