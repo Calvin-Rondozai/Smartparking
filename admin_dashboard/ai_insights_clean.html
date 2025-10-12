@@ -1,0 +1,134 @@
+        <!-- AI Insights Section -->
+        <section id="ai-insights" class="content-section">
+          <!-- Simple Header -->
+          <div class="section-header">
+            <h2>AI Insights</h2>
+            <p>Machine learning predictions and analytics</p>
+            <div class="header-actions">
+              <button class="btn btn-primary" onclick="dashboard.refreshAIPredictions()">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+              <button class="btn btn-secondary" onclick="dashboard.exportAIData()">
+                <i class="fas fa-download"></i> Export
+              </button>
+            </div>
+          </div>
+
+          <!-- Loading State -->
+          <div id="aiLoadingState" class="loading-state">
+            <div class="spinner"></div>
+            <h3>Loading AI Predictions...</h3>
+            <p>Analyzing parking data patterns</p>
+          </div>
+
+          <!-- AI Predictions Content -->
+          <div id="aiPredictionsContent" style="display: none">
+            <!-- Occupancy Predictions -->
+            <div class="card">
+              <div class="card-header">
+                <h3><i class="fas fa-chart-bar"></i> Occupancy Predictions</h3>
+                <span class="badge" id="occupancyOverallAccuracy">Model: -</span>
+              </div>
+              <div class="card-content">
+                <div class="grid grid-4">
+                  <div class="stat-card">
+                    <div class="stat-value" id="occupancy1h">-</div>
+                    <div class="stat-label">Next 1 Hour</div>
+                    <div class="stat-accuracy" id="occupancy1hAccuracy">Accuracy: -</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-value" id="occupancy3h">-</div>
+                    <div class="stat-label">Next 3 Hours</div>
+                    <div class="stat-accuracy" id="occupancy3hAccuracy">Accuracy: -</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-value" id="occupancy24h">-</div>
+                    <div class="stat-label">Next 24 Hours</div>
+                    <div class="stat-accuracy" id="occupancy24hAccuracy">Accuracy: -</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-value" id="occupancyConfidence">-</div>
+                    <div class="stat-label">Overall Confidence</div>
+                    <div class="stat-accuracy" id="occupancyOverallAccuracy">Model: -</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Revenue Forecast -->
+            <div class="card">
+              <div class="card-header">
+                <h3><i class="fas fa-dollar-sign"></i> Revenue Forecast</h3>
+                <span class="badge" id="revenueAccuracy">Accuracy: -</span>
+              </div>
+              <div class="card-content">
+                <div class="grid grid-3">
+                  <div class="stat-card">
+                    <div class="stat-value" id="revenueTomorrow">-</div>
+                    <div class="stat-label">Tomorrow's Revenue</div>
+                    <div class="stat-accuracy" id="revenueConfidence">Confidence: -</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-value" id="peakHour">-</div>
+                    <div class="stat-label">Peak Hour</div>
+                    <div class="stat-accuracy" id="revenueTrend">Trend: -</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- User Behavior Analysis -->
+            <div class="card">
+              <div class="card-header">
+                <h3><i class="fas fa-users"></i> User Behavior Analysis</h3>
+              </div>
+              <div class="card-content">
+                <div id="userBehaviorTable">
+                  <div class="loading-placeholder">
+                    <i class="fas fa-users"></i>
+                    <p>No user behavior data available</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- System Info -->
+            <div class="card">
+              <div class="card-header">
+                <h3><i class="fas fa-info-circle"></i> System Information</h3>
+              </div>
+              <div class="card-content">
+                <div class="grid grid-2">
+                  <div class="info-item">
+                    <span class="info-label">Data Points:</span>
+                    <span class="info-value" id="dataPoints">-</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Last Updated:</span>
+                    <span class="info-value" id="lastUpdated">-</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">System Health:</span>
+                    <span class="info-value" id="systemHealth">-</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Model Performance:</span>
+                    <span class="info-value" id="modelPerformance">-</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Error State -->
+          <div id="aiErrorState" class="error-state" style="display: none">
+            <div class="error-icon">
+              <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3>Error Loading AI Predictions</h3>
+            <p id="aiErrorMessage">Please try again later</p>
+            <button class="btn btn-primary" onclick="dashboard.refreshAIPredictions()">
+              <i class="fas fa-retry"></i> Retry
+            </button>
+          </div>
+        </section>

@@ -19,8 +19,9 @@ from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/', include('parking_app.urls')),
-    path('api/iot/', include('iot_integration.urls')),
-    path('api/chatbot/', include('chatbot.urls')),
+    path("admin/", admin.site.urls),
+    path("api/", include("parking_app.urls")),
+    path("api/iot/", include("iot_integration.urls")),
+    path("api/chatbot/", include("chatbot.urls")),
+    path("api/ai/", include("ai_analytics.urls")),
 ]

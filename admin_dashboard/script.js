@@ -414,7 +414,7 @@ class SmartParkAdmin {
           break;
         case "bookings":
           console.log("Loading bookings section...");
-          await this.loadAllBookings();
+          await this.loadBookingsData();
           break;
         case "users":
           console.log("Loading users section...");
@@ -425,10 +425,6 @@ class SmartParkAdmin {
           break;
         case "reports":
           await this.loadReportsData();
-          break;
-        case "dashboard":
-          console.log("Loading dashboard section...");
-          await this.loadNegativeBalanceUsers();
           break;
         case "settings":
           await this.loadSettingsData();
@@ -449,7 +445,7 @@ class SmartParkAdmin {
     if (!container) return;
 
     try {
-      const response = await fetch(`${this.apiBaseUrl}/admin/bookings/`, {
+      const response = await fetch(`${this.apiBaseUrl}/bookings/`, {
         headers: {
           Authorization: `Token ${this.token}`,
           "Content-Type": "application/json",
@@ -473,15 +469,9 @@ class SmartParkAdmin {
   }
 
   populateSlotFilterOptions() {
-    const slotSel = document.getElementById("bookingSlotFilter");
+    const slotSel = document.getElementById("slotFilter");
     if (!slotSel) return;
     const current = slotSel.value;
-
-    console.log(
-      "Populating slot filter options. Bookings:",
-      this.allBookings?.length || 0
-    );
-
     const slots = Array.from(
       new Set(
         (this.allBookings || []).map(
@@ -489,18 +479,15 @@ class SmartParkAdmin {
         )
       )
     ).filter(Boolean);
-
-    console.log("Extracted slots:", slots);
-
     slotSel.innerHTML = `<option value="">All Slots</option>${slots
-      .map((s) => `<option value="${String(s)}">Slot ${String(s)}</option>`)
+      .map((s) => `<option value="${String(s)}">${String(s)}</option>`)
       .join("")}`;
     if (current) slotSel.value = current;
   }
 
   wireBookingFilters() {
-    const statusSel = document.getElementById("bookingStatusFilter");
-    const slotSel = document.getElementById("bookingSlotFilter");
+    const statusSel = document.getElementById("statusFilter");
+    const slotSel = document.getElementById("slotFilter");
     const dateSel = document.getElementById("dateFilter");
     const clearBtn = document.getElementById("clearFiltersBtn");
     const refreshBtn = document.getElementById("refreshBookingsBtn");
@@ -1300,49 +1287,23 @@ class SmartParkAdmin {
         ? "exclamation-triangle"
         : t === "error"
         ? "times-circle"
-        : t === "system_alert"
-        ? "exclamation-circle"
         : "bell";
-
     el.innerHTML = alerts
       .map((a) => {
         const userLabel = a.user?.username || a.user?.email || "Anonymous";
-
-        // Determine alert styling based on type and priority
-        let borderColor = "var(--primary-green)";
-        let iconBg = "rgba(16,185,129,0.12)";
-        let iconColor = "var(--primary-green)";
-        let badgeBg = "var(--primary-green)";
-        let badgeText = "info";
-
-        if (a.type === "system_alert" && a.priority === "high") {
-          borderColor = "#DC2626"; // Red
-          iconBg = "rgba(220,38,38,0.12)";
-          iconColor = "#DC2626";
-          badgeBg = "#DC2626";
-          badgeText = "HIGH";
-        } else if (a.type === "warning") {
-          borderColor = "#F59E0B"; // Orange
-          iconBg = "rgba(245,158,11,0.12)";
-          iconColor = "#F59E0B";
-          badgeBg = "#F59E0B";
-          badgeText = "WARNING";
-        }
-
         return `
       <div class="alert-item ${
         a.type
-      }" style="background:white; border-radius:12px; box-shadow: var(--shadow-sm); padding:16px; margin:10px 0; display:flex; gap:12px; align-items:flex-start; border-left:4px solid ${borderColor};">
-        <div class="alert-icon" style="width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: ${iconBg}; color: ${iconColor};">
+      }" style="background:white; border-radius:12px; box-shadow: var(--shadow-sm); padding:16px; margin:10px 0; display:flex; gap:12px; align-items:flex-start; border-left:4px solid var(--primary-green);">
+        <div class="alert-icon" style="width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: rgba(16,185,129,0.12); color: var(--primary-green);">
           <i class="fas fa-${icon(a.type)}"></i>
         </div>
         <div class="alert-content" style="flex:1;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h4 style="margin:0;">${
-              a.title ||
-              (a.type === "system_alert" ? "System Alert" : "User Report")
-            }</h4>
-            <span class="badge" style="background: ${badgeBg}; color:white; padding:4px 8px; border-radius:12px; font-size:12px;">${badgeText}</span>
+            <h4 style="margin:0;">${a.title || "User Report"}</h4>
+            <span class="badge" style="background: var(--primary-green); color:white; padding:4px 8px; border-radius:12px; font-size:12px;">${
+              a.priority || "info"
+            }</span>
           </div>
           <div style="color: var(--gray); font-size:12px; margin-top:2px;">From: ${userLabel}</div>
           <p style="margin:8px 0 0 0;">${a.message || ""}</p>
@@ -1839,7 +1800,7 @@ class SmartParkAdmin {
                   <td>${role}</td>
                   <td>${u.is_active ? "Yes" : "No"}</td>
                   <td>${u.total_bookings ?? 0}</td>
-                  <td>$${(u.wallet_balance || 0).toFixed(2)}</td>
+                  <td>$${(u.balance || 0).toFixed(2)}</td>
                   <td>${joined}</td>
                   <td>
                     <button class="btn btn-sm btn-secondary" data-action="view" data-id="${
@@ -1907,9 +1868,6 @@ class SmartParkAdmin {
         <div>Role: <strong>${role}</strong></div>
         <div>Active: <strong>${user.is_active ? "Yes" : "No"}</strong></div>
         <div>Total bookings: <strong>${user.total_bookings ?? 0}</strong></div>
-        <div>Wallet Balance: <strong>$${(user.wallet_balance || 0).toFixed(
-          2
-        )}</strong></div>
         <div>Joined: <strong>${joined}</strong></div>
       </div>
     `;
@@ -3933,7 +3891,6 @@ class SmartParkAdmin {
 
       this.displayBookings(bookings);
       this.updateBookingsCount(bookings.length);
-      this.populateSlotFilterOptions();
     } catch (error) {
       console.error("Error loading bookings:", error);
       this.showNotification("Failed to load bookings", "error");
@@ -3941,79 +3898,8 @@ class SmartParkAdmin {
   }
 
   displayBookings(bookings) {
-    // Store all bookings for filtering
-    this.allBookings = bookings;
-
-    // Apply current filters
-    this.filterBookings();
-  }
-
-  filterBookings() {
-    if (!this.allBookings) return;
-
-    const statusFilter =
-      document.getElementById("bookingStatusFilter")?.value || "";
-    const slotFilter =
-      document.getElementById("bookingSlotFilter")?.value || "";
-    const searchFilter =
-      document.getElementById("bookingSearchFilter")?.value || "";
-
-    let filteredBookings = this.allBookings.filter((booking) => {
-      // Status filter
-      if (statusFilter && booking.status !== statusFilter) {
-        return false;
-      }
-
-      // Slot filter
-      if (slotFilter && booking.parking_spot?.spot_number !== slotFilter) {
-        return false;
-      }
-
-      // Search filter
-      if (searchFilter) {
-        const searchTerm = searchFilter.toLowerCase();
-        const searchableText = [
-          booking.id?.toString(),
-          booking.user?.username,
-          booking.user?.email,
-          booking.user?.first_name,
-          booking.user?.last_name,
-          booking.number_plate,
-          booking.parking_spot?.spot_number,
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        if (!searchableText.includes(searchTerm)) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-
-    this.renderBookingsTable(filteredBookings);
-  }
-
-  clearBookingFilters() {
-    document.getElementById("bookingStatusFilter").value = "";
-    document.getElementById("bookingSlotFilter").value = "";
-    document.getElementById("bookingSearchFilter").value = "";
-    this.filterBookings();
-  }
-
-  renderBookingsTable(bookings) {
     const tableContainer = document.getElementById("bookingsTable");
-    const countElement = document.getElementById("bookingsCount");
-
     if (!tableContainer) return;
-
-    // Update count
-    if (countElement) {
-      countElement.textContent = `${bookings.length} booking${
-        bookings.length !== 1 ? "s" : ""
-      }`;
-    }
 
     if (bookings.length === 0) {
       tableContainer.innerHTML = `
@@ -4164,103 +4050,43 @@ class SmartParkAdmin {
     }
   }
 
-  async loadNegativeBalanceUsers() {
-    try {
-      console.log("Loading users with negative balance...");
+  filterBookings() {
+    const statusFilter = document.getElementById("statusFilter").value;
+    const slotFilter = document.getElementById("slotFilter").value;
+    const dateFilter = document.getElementById("dateFilter").value;
 
-      const response = await fetch(
-        `${this.apiBaseUrl}/admin/users/negative-balance/`,
-        {
-          headers: {
-            Authorization: `Token ${this.token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+    let filteredBookings = this.allBookings || [];
 
-      if (response.status === 401) {
-        this.logout();
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch negative balance users: ${response.status}`
-        );
-      }
-
-      const users = await response.json();
-      console.log("Negative balance users:", users);
-
-      this.displayNegativeBalanceUsers(users);
-    } catch (error) {
-      console.error("Error loading negative balance users:", error);
-      this.showNotification(
-        "Failed to load users with negative balance",
-        "error"
+    if (statusFilter) {
+      filteredBookings = filteredBookings.filter(
+        (booking) => booking.status === statusFilter
       );
     }
+
+    if (slotFilter) {
+      filteredBookings = filteredBookings.filter(
+        (booking) => booking.parking_spot?.spot_number === slotFilter
+      );
+    }
+
+    if (dateFilter) {
+      const filterDate = new Date(dateFilter);
+      filteredBookings = filteredBookings.filter((booking) => {
+        const bookingDate = new Date(booking.start_time);
+        return bookingDate.toDateString() === filterDate.toDateString();
+      });
+    }
+
+    this.displayBookings(filteredBookings);
+    this.updateBookingsCount(filteredBookings.length);
   }
 
-  displayNegativeBalanceUsers(users) {
-    const tableContainer = document.getElementById("negativeBalanceTable");
-    if (!tableContainer) return;
-
-    if (users.length === 0) {
-      tableContainer.innerHTML = `
-        <div style="text-align: center; padding: 40px; color: var(--gray);">
-          <i class="fas fa-check-circle" style="font-size: 48px; margin-bottom: 16px; color: var(--success-green);"></i>
-          <p>No users with negative balance</p>
-          <small>All users have positive wallet balances</small>
-        </div>
-      `;
-      return;
-    }
-
-    const table = `
-      <table style="width: 100%; border-collapse: collapse; min-width: 600px;">
-        <thead>
-          <tr style="background: var(--light-gray);">
-            <th style="padding: 16px; text-align: left; border-bottom: 1px solid var(--gray); color: var(--dark-gray); font-weight: 600;">Full Name</th>
-            <th style="padding: 16px; text-align: left; border-bottom: 1px solid var(--gray); color: var(--dark-gray); font-weight: 600;">Email</th>
-            <th style="padding: 16px; text-align: left; border-bottom: 1px solid var(--gray); color: var(--dark-gray); font-weight: 600;">Number Plate</th>
-            <th style="padding: 16px; text-align: left; border-bottom: 1px solid var(--gray); color: var(--dark-gray); font-weight: 600;">Balance</th>
-            <th style="padding: 16px; text-align: left; border-bottom: 1px solid var(--gray); color: var(--dark-gray); font-weight: 600;">Joined</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${users
-            .map(
-              (user) => `
-            <tr style="border-bottom: 1px solid var(--light-gray);">
-              <td style="padding: 16px; color: var(--dark-gray); font-weight: 600;">
-                ${this.escapeHtml(user.full_name || user.username)}
-              </td>
-              <td style="padding: 16px; color: var(--dark-gray);">
-                ${this.escapeHtml(user.email || "N/A")}
-              </td>
-              <td style="padding: 16px; color: var(--dark-gray);">
-                ${this.escapeHtml(user.number_plate || "N/A")}
-              </td>
-              <td style="padding: 16px; color: #dc3545; font-weight: 600; font-size: 16px;">
-                $${user.wallet_balance.toFixed(2)}
-              </td>
-              <td style="padding: 16px; color: var(--gray); font-size: 14px;">
-                ${
-                  user.date_joined
-                    ? new Date(user.date_joined).toLocaleDateString()
-                    : "N/A"
-                }
-              </td>
-            </tr>
-          `
-            )
-            .join("")}
-        </tbody>
-      </table>
-    `;
-
-    tableContainer.innerHTML = table;
+  clearFilters() {
+    document.getElementById("statusFilter").value = "";
+    document.getElementById("slotFilter").value = "";
+    document.getElementById("dateFilter").value = "";
+    this.displayBookings(this.allBookings || []);
+    this.updateBookingsCount(this.allBookings?.length || 0);
   }
 
   async refreshBookings() {
@@ -5451,12 +5277,10 @@ class SmartParkAdmin {
           .then((d) => {
             const reports = (d.reports || []).map((r) => ({
               id: r.id,
-              type: r.type || "info",
-              title: r.type === "system_alert" ? "System Alert" : "User Report",
+              type: "info",
+              title: "User Report",
               message: r.message,
               created_at: r.created_at,
-              priority: r.priority || "medium",
-              user: r.user || null,
             }));
             // Prefer global dashboard.renderAlertsList if available, otherwise fall back to instance method
             if (
@@ -5496,12 +5320,13 @@ class SmartParkAdmin {
       const data = await resp.json();
       const reports = (data.reports || []).map((r) => ({
         id: r.id,
-        type: r.type || "info",
-        title: r.type === "system_alert" ? "System Alert" : "User Report",
+        type: "info",
+        title: "User Report",
         message: r.message,
         created_at: r.created_at,
-        priority: r.priority || "medium",
         user: r.user || null,
+        priority: r.priority || "normal",
+        report_type: r.type || r.report_type || "user_report",
       }));
       this._latestReports = reports;
       this.renderAlertsList(reports);
