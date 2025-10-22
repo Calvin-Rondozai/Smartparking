@@ -3,7 +3,7 @@ class SmartParkAdmin {
   constructor() {
     this.currentSection = "dashboard";
     this.refreshInterval = 5000; // 5 seconds
-    this.apiBaseUrl = "http://10.38.47.47:8000/api";
+    this.apiBaseUrl = "http://localhost:8000/api";
     this.iotApiUrl = "http://10.38.47.47:8000/api/iot";
     this.slots = [];
     this.devices = [];
@@ -46,7 +46,9 @@ class SmartParkAdmin {
     this.startAutoRefresh();
     this.generateOccupancyGrid();
     this.updateUserInfo();
-    this.setupDashboardRefresh(); // Call the new method here
+
+    // Load alerts badge immediately on dashboard startup
+    this.loadAlertsBadgeOnStartup();
     // Pre-render dashboard analytics UI and make it default landing
     this.loadReportsData().catch((e) =>
       console.warn("Dashboard init failed:", e)
@@ -325,6 +327,7 @@ class SmartParkAdmin {
       this.updateKPIs(parkingData);
       this.updateOccupancyGrid(parkingData);
       this.updateDeviceHealth(deviceData);
+      this.loadNegativeBalanceUsers(); // Load negative balance users
       // Merge device alerts with booking-created alerts
       const deviceAlerts = deviceData.alerts || [];
       const bookingsArray = Array.isArray(bookingData)
@@ -1109,16 +1112,7 @@ class SmartParkAdmin {
     const container = document.querySelector("#alerts .alerts-container");
     if (!container) return;
 
-    container.innerHTML = `
-      <div class="alerts-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <h2 style="margin:0;">Alerts</h2>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <button class="btn btn-sm btn-secondary" id="refreshAlertsBtn"><i class="fas fa-sync-alt"></i> Refresh</button>
-          <button class="btn btn-sm btn-outline" id="exportAlertsBtn"><i class="fas fa-download"></i> Export</button>
-        </div>
-      </div>
-      <div class="alerts-list"></div>
-    `;
+    container.innerHTML = `<div class="alerts-list"></div>`;
 
     // Immediately paint current state (even if empty) so the DOM exists
     try {
@@ -1135,28 +1129,6 @@ class SmartParkAdmin {
       console.log("Initial updateAlerts failed:", e);
     }
 
-    const refreshBtn = container.querySelector("#refreshAlertsBtn");
-    if (refreshBtn) {
-      refreshBtn.addEventListener("click", async () => {
-        refreshBtn.innerHTML =
-          '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
-        refreshBtn.disabled = true;
-        try {
-          await this.fetchAlertsFromBackend();
-          this.showNotification("Alerts updated", "success");
-        } catch (e) {
-          this.showNotification("Failed to update alerts", "error");
-        } finally {
-          refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh';
-          refreshBtn.disabled = false;
-        }
-      });
-    }
-
-    const exportBtn = container.querySelector("#exportAlertsBtn");
-    if (exportBtn)
-      exportBtn.addEventListener("click", () => this.exportAlertsCSV());
-
     // First, fetch reports list directly so UI shows something immediately
     try {
       await this.fetchAlertsFallback();
@@ -1172,6 +1144,15 @@ class SmartParkAdmin {
       console.log("fetchAlertsFromBackend threw:", err);
     }
     this.startAlertsTimers();
+    try {
+      this.updateAlertsBadge();
+    } catch (_) {}
+    if (this.alertsBadgeTimer) clearInterval(this.alertsBadgeTimer);
+    this.alertsBadgeTimer = setInterval(() => {
+      try {
+        this.updateAlertsBadge();
+      } catch (_) {}
+    }, 10000);
   }
 
   async fetchAlertsFallback() {
@@ -1196,6 +1177,10 @@ class SmartParkAdmin {
     console.log("Fallback alerts:", this.alerts);
     this.updateAlerts(this.alerts);
     this.renderAlertsList(this.alerts);
+    this._latestReports = Array.isArray(this.alerts) ? this.alerts.slice() : [];
+    try {
+      this.updateAlertsBadge();
+    } catch (_) {}
   }
 
   async fetchAlertsFromBackend() {
@@ -1253,6 +1238,12 @@ class SmartParkAdmin {
         console.log("Final alerts:", this.alerts);
         this.updateAlerts(this.alerts);
         this.renderAlertsList(this.alerts);
+        this._latestReports = Array.isArray(this.alerts)
+          ? this.alerts.slice()
+          : [];
+        try {
+          this.updateAlertsBadge();
+        } catch (_) {}
         return;
       } catch (e) {
         console.log(`Failed to fetch from ${url}:`, e);
@@ -1265,6 +1256,10 @@ class SmartParkAdmin {
     try {
       this.renderAlertsList(this.alerts || []);
     } catch (e) {}
+    this._latestReports = Array.isArray(this.alerts) ? this.alerts.slice() : [];
+    try {
+      this.updateAlertsBadge();
+    } catch (_) {}
   }
 
   renderAlertsList(alerts = []) {
@@ -1336,14 +1331,12 @@ class SmartParkAdmin {
 
   startAlertsTimers() {
     this.stopAlertsTimers();
-    // Update relative time labels every 60s
+    // Update relative time labels every 60s - keep alerts visible
     this.alertsClockTimer = setInterval(() => {
-      if (this.currentSection !== "alerts") return;
       this.updateAlerts(this.alerts || []);
     }, 60000);
-    // Periodically refetch alerts every 90s while on Alerts
+    // Periodically refetch alerts every 90s - keep alerts visible
     this.alertsRefreshTimer = setInterval(() => {
-      if (this.currentSection !== "alerts") return;
       this.fetchAlertsFromBackend();
     }, 90000);
   }
@@ -1356,6 +1349,24 @@ class SmartParkAdmin {
     if (this.alertsRefreshTimer) {
       clearInterval(this.alertsRefreshTimer);
       this.alertsRefreshTimer = null;
+    }
+  }
+
+  async loadAlertsBadgeOnStartup() {
+    try {
+      // Fetch alerts immediately on dashboard startup
+      await this.fetchAlertsFallback();
+      this.updateAlertsBadge();
+
+      // Set up periodic badge updates
+      if (this.alertsBadgeTimer) clearInterval(this.alertsBadgeTimer);
+      this.alertsBadgeTimer = setInterval(() => {
+        try {
+          this.updateAlertsBadge();
+        } catch (_) {}
+      }, 30000); // Update every 30 seconds
+    } catch (e) {
+      console.log("Failed to load alerts badge on startup:", e);
     }
   }
 
@@ -4356,6 +4367,199 @@ class SmartParkAdmin {
     return csvRows.join("\n");
   }
 
+  async loadNegativeBalanceUsers() {
+    try {
+      console.log("Loading users with negative balance...");
+
+      const response = await fetch(`${this.apiBaseUrl}/admin/users/`, {
+        headers: {
+          Authorization: `Token ${this.token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.status === 401) {
+        this.logout();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch users: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const users = Array.isArray(data)
+        ? data
+        : data.results || data.users || [];
+
+      // Filter users with negative balance
+      const negativeBalanceUsers = users.filter((user) => {
+        const balance = parseFloat(user.balance || user.profile?.balance || 0);
+        return balance < 0;
+      });
+
+      this.displayNegativeBalanceUsers(negativeBalanceUsers);
+    } catch (error) {
+      console.error("Error loading negative balance users:", error);
+      this.displayNegativeBalanceUsers([]);
+    }
+  }
+
+  displayNegativeBalanceUsers(users) {
+    const container = document.getElementById("negativeBalanceTable");
+    if (!container) return;
+
+    if (users.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: #666;">
+          <i class="fas fa-check-circle" style="font-size: 48px; color: #4CAF50; margin-bottom: 16px;"></i>
+          <h3>No Users with Negative Balance</h3>
+          <p>All users have positive or zero balance.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const tableHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>User ID</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Balance</th>
+            <th>Last Login</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${users
+            .map(
+              (user) => `
+            <tr>
+              <td>${user.id}</td>
+              <td>${user.username || "N/A"}</td>
+              <td>${user.email || "N/A"}</td>
+              <td>
+                <span style="color: #F44336; font-weight: bold;">
+                  $${parseFloat(
+                    user.balance || user.profile?.balance || 0
+                  ).toFixed(2)}
+                </span>
+              </td>
+              <td>${
+                user.last_login
+                  ? new Date(user.last_login).toLocaleDateString()
+                  : "Never"
+              }</td>
+              <td>
+                <button class="btn btn-sm btn-outline" onclick="dashboard.viewUserDetails(${
+                  user.id
+                })">
+                  <i class="fas fa-eye"></i> View
+                </button>
+              </td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+
+    container.innerHTML = tableHTML;
+  }
+
+  viewUserDetails(userId) {
+    // Find the user in allUsers or fetch user details
+    const user = this.allUsers?.find((u) => u.id === userId);
+    if (user) {
+      this.showUserDetailsModal(user);
+    } else {
+      this.showNotification("User details not available", "error");
+    }
+  }
+
+  showUserDetailsModal(user) {
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>User Details</h3>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="user-details">
+            <div class="detail-row">
+              <label>User ID:</label>
+              <span>${user.id}</span>
+            </div>
+            <div class="detail-row">
+              <label>Username:</label>
+              <span>${user.username || "N/A"}</span>
+            </div>
+            <div class="detail-row">
+              <label>Email:</label>
+              <span>${user.email || "N/A"}</span>
+            </div>
+            <div class="detail-row">
+              <label>Balance:</label>
+              <span style="color: ${
+                parseFloat(user.balance || user.profile?.balance || 0) < 0
+                  ? "#F44336"
+                  : "#4CAF50"
+              }; font-weight: bold;">
+                $${parseFloat(
+                  user.balance || user.profile?.balance || 0
+                ).toFixed(2)}
+              </span>
+            </div>
+            <div class="detail-row">
+              <label>First Name:</label>
+              <span>${user.first_name || "N/A"}</span>
+            </div>
+            <div class="detail-row">
+              <label>Last Name:</label>
+              <span>${user.last_name || "N/A"}</span>
+            </div>
+            <div class="detail-row">
+              <label>Date Joined:</label>
+              <span>${
+                user.date_joined
+                  ? new Date(user.date_joined).toLocaleDateString()
+                  : "N/A"
+              }</span>
+            </div>
+            <div class="detail-row">
+              <label>Last Login:</label>
+              <span>${
+                user.last_login
+                  ? new Date(user.last_login).toLocaleDateString()
+                  : "Never"
+              }</span>
+            </div>
+            <div class="detail-row">
+              <label>Is Active:</label>
+              <span style="color: ${user.is_active ? "#4CAF50" : "#F44336"}">
+                ${user.is_active ? "Yes" : "No"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+            Close
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+  }
+
   async loadUsersData() {
     console.log("Loading users data...");
     console.log("Token:", this.token ? "Present" : "Missing");
@@ -4709,13 +4913,28 @@ class SmartParkAdmin {
                 <span>${user.email}</span>
               </div>
               <div style="margin-bottom: 12px;">
+                <strong>License Number:</strong><br>
+                <span>${(() => {
+                  const value =
+                    user.car_name ??
+                    user.license_number ??
+                    (user.profile ? user.profile.car_name : "");
+                  const text =
+                    typeof value === "string"
+                      ? value.trim()
+                      : String(value || "").trim();
+                  return text || "Unavailable";
+                })()}</span>
+              </div>
+              <div style="margin-bottom: 12px;">
                 <strong>Number Plate:</strong><br>
                 <span>${(() => {
                   const addr = user.address || "";
                   if (!addr) return "N/A";
                   if (addr.includes("|")) {
                     const parts = addr.split("|");
-                    return (parts[1] || parts[0] || "N/A").trim() || "N/A";
+                    // Prefer the first segment as the number plate
+                    return (parts[0] || parts[1] || "N/A").trim() || "N/A";
                   }
                   return addr.trim() || "N/A";
                 })()}</span>
@@ -4730,16 +4949,20 @@ class SmartParkAdmin {
               `
                   : ""
               }
-              ${
-                user.address
-                  ? `
               <div style="margin-bottom: 12px;">
-                <strong>Address:</strong><br>
-                <span>${user.address}</span>
+                <strong>License Number:</strong><br>
+                <span>${(() => {
+                  const value =
+                    user.car_name ??
+                    user.license_number ??
+                    (user.profile ? user.profile.car_name : "");
+                  const text =
+                    typeof value === "string"
+                      ? value.trim()
+                      : String(value || "").trim();
+                  return text || "Unavailable";
+                })()}</span>
               </div>
-              `
-                  : ""
-              }
               ${
                 user.last_password_reset
                   ? `
@@ -4888,6 +5111,18 @@ class SmartParkAdmin {
         </div>
         
         <form id="editUserForm" style="display: flex; flex-direction: column; gap: 20px;">
+          <div>
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark-gray);">Username</label>
+            <input type="text" value="${
+              user.username || ""
+            }" name="username" required style="width: 100%; padding: 12px; border: 1px solid var(--light-gray); border-radius: 6px; font-size: 14px;">
+          </div>
+
+          <div>
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark-gray);">New Password (leave blank to keep current)</label>
+            <input type="password" value="" name="password" placeholder="Enter new password" style="width: 100%; padding: 12px; border: 1px solid var(--light-gray); border-radius: 6px; font-size: 14px;">
+          </div>
+
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
             <div>
               <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark-gray);">First Name</label>
@@ -4918,10 +5153,17 @@ class SmartParkAdmin {
           </div>
           
           <div>
-            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark-gray);">Address</label>
-            <textarea name="address" rows="3" style="width: 100%; padding: 12px; border: 1px solid var(--light-gray); border-radius: 6px; font-size: 14px; resize: vertical;">${
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark-gray);">License Number</label>
+            <input type="text" value="${
+              user.car_name || ""
+            }" name="car_name" style="width: 100%; padding: 12px; border: 1px solid var(--light-gray); border-radius: 6px; font-size: 14px; font-family: monospace;" placeholder="Enter license number">
+          </div>
+          
+          <div>
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark-gray);">Number Plate</label>
+            <input type="text" value="${
               user.address || ""
-            }</textarea>
+            }" name="number_plate" style="width: 100%; padding: 12px; border: 1px solid var(--light-gray); border-radius: 6px; font-size: 14px; font-family: monospace;" placeholder="Enter number plate">
           </div>
           
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
@@ -4974,25 +5216,35 @@ class SmartParkAdmin {
   async updateUser(userId, formData) {
     try {
       const userData = {
+        username: formData.get("username"),
         first_name: formData.get("first_name"),
         last_name: formData.get("last_name"),
         email: formData.get("email"),
         phone: formData.get("phone"),
-        address: formData.get("address"),
+        password: formData.get("password") || "",
+        // Send both keys for compatibility with backend expectations
+        car_name: formData.get("car_name") || null,
+        number_plate:
+          formData.get("number_plate") || formData.get("address") || null,
+        numberPlate:
+          formData.get("number_plate") || formData.get("address") || null,
         is_active: formData.get("is_active") === "true",
         is_staff:
           formData.get("role") === "staff" || formData.get("role") === "admin",
         is_superuser: formData.get("role") === "admin",
       };
 
-      const response = await fetch(`${this.apiBaseUrl}/users/${userId}/`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Token ${this.token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(userData),
-      });
+      const response = await fetch(
+        `${this.apiBaseUrl}/admin/users/${userId}/update/`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Token ${this.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(userData),
+        }
+      );
 
       if (response.ok) {
         this.showNotification("User updated successfully", "success");
@@ -5262,78 +5514,9 @@ class SmartParkAdmin {
     if (modal) {
       modal.remove();
     }
-  }
-
-  async loadAlertsData() {
-    console.log("Loading alerts data...");
-    try {
-      // Run the requested one-liner fetch every time Alerts is opened
-      try {
-        await fetch(
-          "http://10.38.47.47:8000/api/admin/reports/list/?t=" + Date.now(),
-          { cache: "no-store" }
-        )
-          .then((r) => r.json())
-          .then((d) => {
-            const reports = (d.reports || []).map((r) => ({
-              id: r.id,
-              type: "info",
-              title: "User Report",
-              message: r.message,
-              created_at: r.created_at,
-            }));
-            // Prefer global dashboard.renderAlertsList if available, otherwise fall back to instance method
-            if (
-              window.dashboard &&
-              typeof window.dashboard.renderAlertsList === "function"
-            ) {
-              window.dashboard.renderAlertsList(reports);
-            } else {
-              this.renderAlertsList(reports);
-            }
-            this._latestReports = reports;
-          });
-      } catch (e) {
-        console.warn(
-          "Alerts quick fetch failed, falling back to internal loader:",
-          e
-        );
-      }
-
-      // Ensure container exists
-      const alertsSection = document.getElementById("alerts");
-      if (alertsSection) {
-        let list = alertsSection.querySelector(".alerts-list");
-        if (!list) {
-          const container =
-            alertsSection.querySelector(".alerts-container") || alertsSection;
-          list = document.createElement("div");
-          list.className = "alerts-list";
-          container.appendChild(list);
-        }
-      }
-
-      // Internal loader (kept for robustness)
-      const url = `http://10.38.47.47:8000/api/admin/reports/list/?t=${Date.now()}`;
-      const resp = await fetch(url, { cache: "no-store" });
-      if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
-      const data = await resp.json();
-      const reports = (data.reports || []).map((r) => ({
-        id: r.id,
-        type: "info",
-        title: "User Report",
-        message: r.message,
-        created_at: r.created_at,
-        user: r.user || null,
-        priority: r.priority || "normal",
-        report_type: r.type || r.report_type || "user_report",
-      }));
-      this._latestReports = reports;
-      this.renderAlertsList(reports);
-    } catch (err) {
-      console.error("Failed to load alerts:", err);
-      this.showNotification("Failed to load alerts", "error");
-    }
+    // Also remove any other modal overlays that might exist
+    const allModals = document.querySelectorAll(".modal-overlay");
+    allModals.forEach((modal) => modal.remove());
   }
 
   renderAlertsList(reports) {
@@ -5432,12 +5615,22 @@ class SmartParkAdmin {
     const modal = document.createElement("div");
     modal.className = "modal-overlay";
     modal.style.cssText =
-      "position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:10000;";
+      "position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:10000;opacity:1;transition:opacity 0.3s ease;";
+
+    const closeModal = () => {
+      modal.style.opacity = "0";
+      setTimeout(() => {
+        if (modal.parentNode) {
+          modal.remove();
+        }
+      }, 300);
+    };
+
     modal.innerHTML = `
       <div class="modal-content" style="background:#fff; padding:24px; border-radius:12px; max-width:600px; width:90%;">
         <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom:12px;">
           <h3 style="margin:0; color: var(--black);">User Report</h3>
-          <button onclick="this.closest('.modal-overlay').remove()" style="background:none;border:none;font-size:20px;color:var(--gray);cursor:pointer">×</button>
+          <button onclick="closeModal()" style="background:none;border:none;font-size:20px;color:var(--gray);cursor:pointer">×</button>
         </div>
         <div style="color:var(--dark-gray); white-space:pre-wrap;">${this.escapeHtml(
           report.message || ""
@@ -5446,9 +5639,13 @@ class SmartParkAdmin {
           String(userText)
         )} • ${created}</div>
         <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+          <button class="btn btn-secondary" onclick="closeModal()">Close</button>
         </div>
       </div>`;
+
+    // Make closeModal function available globally for onclick handlers
+    window.closeModal = closeModal;
+
     document.body.appendChild(modal);
   }
 
@@ -6112,6 +6309,20 @@ class SmartParkAdmin {
             </div>
             
             <div style="margin-bottom: 20px;">
+              <label style="display: block; font-weight: 600; color: var(--dark-gray); margin-bottom: 8px;">Phone</label>
+              <input type="tel" id="editPhone" value="${
+                user.phone || ""
+              }" placeholder="Enter phone number" style="width: 100%; padding: 12px; border: 2px solid var(--light-gray); border-radius: 6px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <label style="display: block; font-weight: 600; color: var(--dark-gray); margin-bottom: 8px;">License Number</label>
+              <input type="text" id="editCarName" value="${
+                user.car_name || ""
+              }" placeholder="Enter license number" style="width: 100%; padding: 12px; border: 2px solid var(--light-gray); border-radius: 6px; font-size: 14px; font-family: monospace;">
+            </div>
+
+            <div style="margin-bottom: 20px;">
               <label style="display: block; font-weight: 600; color: var(--dark-gray); margin-bottom: 8px;">Number Plate</label>
               <input type="text" id="editNumberPlate" value="${(() => {
                 const addr = user.address || "";
@@ -6122,6 +6333,18 @@ class SmartParkAdmin {
                 }
                 return addr.trim();
               })()}" placeholder="Enter vehicle number plate" style="width: 100%; padding: 12px; border: 2px solid var(--light-gray); border-radius: 6px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <label style="display: block; font-weight: 600; color: var(--dark-gray); margin-bottom: 8px;">Balance</label>
+              <input type="number" id="editBalance" value="${(() => {
+                const b =
+                  typeof user.balance === "number"
+                    ? user.balance
+                    : user.balance || user.wallet_balance || 0;
+                const n = typeof b === "number" ? b : parseFloat(b) || 0;
+                return n.toFixed(2);
+              })()}" step="0.01" placeholder="Enter balance" style="width: 100%; padding: 12px; border: 2px solid var(--light-gray); border-radius: 6px; font-size: 14px;">
             </div>
 
             <div style="margin-bottom: 20px;">
@@ -6180,9 +6403,12 @@ class SmartParkAdmin {
     const userData = {
       username: document.getElementById("editUsername").value,
       email: document.getElementById("editEmail").value,
+      phone: document.getElementById("editPhone")?.value || "",
       first_name: document.getElementById("editFirstName").value,
       last_name: document.getElementById("editLastName").value,
+      car_name: document.getElementById("editCarName")?.value || "",
       number_plate: document.getElementById("editNumberPlate")?.value || "",
+      balance: parseFloat(document.getElementById("editBalance")?.value || 0),
       is_active: document.getElementById("editUserActive").checked,
       is_staff:
         document.getElementById("editUserRole").value === "staff" ||

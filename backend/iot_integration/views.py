@@ -15,7 +15,38 @@ from .serializers import (
     IoTDeviceCreateSerializer,
     SensorDataCreateSerializer,
 )
-from parking_app.models import ParkingSpot
+from parking_app.models import ParkingSpot, UserReport
+
+
+def check_unauthorized_parking(spot):
+    """Check if someone parked without a booking and create admin alert"""
+    try:
+        from parking_app.models import Booking
+
+        # Check if there's an active booking for this spot
+        active_booking = Booking.objects.filter(
+            parking_spot=spot, status="active", timer_started__isnull=False
+        ).first()
+
+        if not active_booking:
+            # No active booking found - this is unauthorized parking
+            alert_message = f"🚨 UNAUTHORIZED PARKING DETECTED: Car parked in {spot.spot_number} without a booking. Immediate attention required!"
+
+            # Create admin alert
+            UserReport.objects.create(
+                user=None,  # System alert
+                message=alert_message,
+                type="system_alert",
+                priority="high",
+                status="pending",
+            )
+
+            print(
+                f"🚨 UNAUTHORIZED PARKING ALERT: {spot.spot_number} occupied without booking"
+            )
+
+    except Exception as e:
+        print(f"Error checking unauthorized parking: {e}")
 
 
 def _auto_complete_booking_for_slot(spot_number):
@@ -345,6 +376,10 @@ def get_parking_availability(request):
                         spot = ParkingSpot.objects.get(
                             parking_lot=lot, spot_number=slot_name
                         )
+
+                        # Store previous occupancy state
+                        was_occupied = spot.is_occupied
+
                         # Use the dual sensor data if available
                         if (
                             hasattr(latest_data, "slot1_occupied")
@@ -361,7 +396,13 @@ def get_parking_availability(request):
                         else:
                             # Fallback to general occupancy
                             spot.is_occupied = latest_data.is_occupied
+
                         spot.save()
+
+                        # Check for unauthorized parking (car detected but no active booking)
+                        if spot.is_occupied and not was_occupied:
+                            check_unauthorized_parking(spot)
+
                         print(
                             f"Updated {slot_name}: {'Occupied' if spot.is_occupied else 'Available'}"
                         )

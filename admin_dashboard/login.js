@@ -1,7 +1,7 @@
 // Login functionality for SmartPark Admin
 class AdminLogin {
   constructor() {
-    this.apiBaseUrl = "http://10.38.47.47:8000/api";
+    this.apiBaseUrl = "http://localhost:8000/api";
     this.init();
   }
 
@@ -49,7 +49,6 @@ class AdminLogin {
   async handleLogin() {
     const username = document.getElementById("username").value;
     const password = document.getElementById("password").value;
-    const remember = document.getElementById("remember").checked;
 
     if (!username || !password) {
       this.showError("Please enter both username and password");
@@ -77,10 +76,6 @@ class AdminLogin {
         // Store token
         localStorage.setItem("adminToken", data.token);
         localStorage.setItem("adminUser", JSON.stringify(data.user));
-
-        if (remember) {
-          localStorage.setItem("rememberMe", "true");
-        }
 
         this.showSuccess("Login successful! Redirecting...");
 
@@ -151,17 +146,14 @@ class AdminLogin {
   }
 }
 
-// Password toggle functionality
+// Password toggle functionality (if needed in future)
 function togglePassword() {
   const passwordInput = document.getElementById("password");
-  const toggleBtn = document.querySelector(".toggle-password i");
 
   if (passwordInput.type === "password") {
     passwordInput.type = "text";
-    toggleBtn.className = "fas fa-eye-slash";
   } else {
     passwordInput.type = "password";
-    toggleBtn.className = "fas fa-eye";
   }
 }
 

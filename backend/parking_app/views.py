@@ -198,14 +198,14 @@ def trigger_esp32_booking_led(slot_number, led_state):
     try:
         import requests
         from iot_integration.models import IoTDevice
-        
+
         # Find the ESP32 device
         device = IoTDevice.objects.filter(device_type="sensor").first()
-        
+
         if not device:
             print("No active ESP32 device found")
             return
-        
+
         # Prepare the request data based on LED state
         if led_state == "red":
             # Red light for overtime
@@ -243,17 +243,17 @@ def trigger_esp32_booking_led(slot_number, led_state):
                 "message": "BOOKED",
             }
             print(f"🔵 ESP32: Turn ON blue LED for slot {slot_number} (BOOKED)")
-        
+
         # Send request to ESP32 control endpoint
         response = requests.post(
             "http://localhost:8000/api/iot/control/booking/", json=data, timeout=5
         )
-        
+
         if response.status_code == 200:
             print(f"✅ ESP32 LED control successful for {slot_number}")
         else:
             print(f"❌ ESP32 LED control failed: {response.status_code}")
-            
+
     except Exception as e:
         print(f"⚠️  ESP32 LED control error: {e}")
 
@@ -412,25 +412,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -444,16 +444,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -467,7 +467,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -482,19 +482,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -506,7 +506,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -521,25 +521,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -553,16 +553,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -576,7 +576,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -604,7 +604,7 @@ def signin(request):
             "is_admin:",
             is_admin_login,
         )
-        
+
         if not username or not password:
             return Response(
                 {"error": "Username and password are required"},
@@ -613,7 +613,7 @@ def signin(request):
 
         # Trim whitespace from username and make it case-insensitive
         username = username.strip()
-        
+
         # Try to find user with case-insensitive username lookup
         try:
             user_obj = User.objects.get(username__iexact=username)
@@ -622,20 +622,20 @@ def signin(request):
         except User.DoesNotExist:
             user = None
         print("SIGNIN user:", user)
-        
+
         if user is None:
             return Response(
                 {"error": "Invalid username or password"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        
+
         # Check if user is active
         if not user.is_active:
             return Response(
                 {"error": "Account is deactivated. Please contact support."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        
+
         # If this is an admin login attempt, check if user has admin privileges
         if is_admin_login:
             if not (user.is_staff or user.is_superuser):
@@ -645,7 +645,7 @@ def signin(request):
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        
+
         token, created = Token.objects.get_or_create(user=user)
         # Update last_login explicitly so dashboard shows correct timestamp
         try:
@@ -655,13 +655,13 @@ def signin(request):
             user.save(update_fields=["last_login"])
         except Exception:
             pass
-        
+
         try:
             profile = UserProfile.objects.get(user=user)
             profile_data = UserProfileSerializer(profile).data
         except UserProfile.DoesNotExist:
             profile_data = {}
-        
+
         return Response(
             {
                 "message": "Login successful",
@@ -682,25 +682,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -714,16 +714,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -737,7 +737,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -767,14 +767,14 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
@@ -782,12 +782,12 @@ def detect_car_parked(request, booking_id):
                 # Initialize progressive billing start
                 booking.last_billing_at = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -834,7 +834,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -849,19 +849,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -873,7 +873,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -888,25 +888,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -920,16 +920,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -943,7 +943,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -965,13 +965,13 @@ def verify_auth(request):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
+
         try:
             profile = UserProfile.objects.get(user=request.user)
             profile_data = UserProfileSerializer(profile).data
         except UserProfile.DoesNotExist:
             profile_data = {}
-        
+
         return Response(
             {
                 "user": UserSerializer(request.user).data,
@@ -981,7 +981,7 @@ def verify_auth(request):
             },
             status=status.HTTP_200_OK,
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -992,25 +992,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -1024,16 +1024,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -1047,7 +1047,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1062,19 +1062,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -1086,7 +1086,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1101,25 +1101,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -1133,16 +1133,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -1156,7 +1156,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1197,7 +1197,7 @@ def update_user_profile(request):
     try:
         profile = UserProfile.objects.get(user=request.user)
         print(f"[update_user_profile] Found profile: {profile}")
-        
+
         # Update user data if provided
         user_data = request.data.get("user", {})
         if user_data:
@@ -1218,7 +1218,7 @@ def update_user_profile(request):
                     )
                 request.user.email = user_data["email"]
             request.user.save()
-        
+
         # Update profile data if provided
         profile_data = request.data.get("profile", {})
         print(f"[update_user_profile] Profile data: {profile_data}")
@@ -1242,7 +1242,7 @@ def update_user_profile(request):
                     )
             profile.save()
             print(f"[update_user_profile] Profile saved successfully")
-        
+
         return Response(
             {
                 "message": "Profile updated successfully",
@@ -1251,7 +1251,7 @@ def update_user_profile(request):
             },
             status=status.HTTP_200_OK,
         )
-        
+
     except UserProfile.DoesNotExist:
         return Response(
             {"error": "Profile not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1266,25 +1266,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -1298,16 +1298,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -1321,7 +1321,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1336,19 +1336,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -1360,7 +1360,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1375,25 +1375,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -1407,16 +1407,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -1430,7 +1430,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1446,35 +1446,35 @@ def change_password(request):
     try:
         current_password = request.data.get("current_password")
         new_password = request.data.get("new_password")
-        
+
         if not current_password or not new_password:
             return Response(
                 {"error": "Current password and new password are required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Verify current password
         if not request.user.check_password(current_password):
             return Response(
                 {"error": "Current password is incorrect"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Check if new password is different
         if current_password == new_password:
             return Response(
                 {"error": "New password must be different from current password"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Update password
         request.user.set_password(new_password)
         request.user.save()
-        
+
         return Response(
             {"message": "Password changed successfully"}, status=status.HTTP_200_OK
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1485,25 +1485,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -1517,16 +1517,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -1540,7 +1540,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1555,19 +1555,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -1579,7 +1579,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1594,25 +1594,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -1626,16 +1626,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -1649,7 +1649,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1664,10 +1664,10 @@ def get_booking_overtime(request, booking_id):
     """Get overtime information for a booking"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         if booking.status == "active" and booking.is_expired():
             overtime_minutes, overtime_cost = booking.update_overtime_billing()
-            
+
             return Response(
                 {
                     "overtime_minutes": overtime_minutes,
@@ -1687,7 +1687,7 @@ def get_booking_overtime(request, booking_id):
                     + float(booking.overtime_cost),
                 }
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1702,25 +1702,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -1734,16 +1734,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -1757,7 +1757,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1772,19 +1772,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -1796,7 +1796,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1811,25 +1811,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -1843,16 +1843,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -1866,7 +1866,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -1903,12 +1903,12 @@ class ParkingSpotDetail(generics.RetrieveUpdateDestroyAPIView):
 class BookingList(generics.ListCreateAPIView):
     serializer_class = BookingSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         user_bookings = Booking.objects.filter(user=self.request.user)
         print(f"=== Fetching bookings for user {self.request.user.username} ===")
         print(f"Found {user_bookings.count()} bookings")
-        
+
         # Check for expired bookings and mark them as completed
         for booking in user_bookings.filter(status="active"):
             if booking.mark_as_completed_if_expired():
@@ -1921,7 +1921,7 @@ class BookingList(generics.ListCreateAPIView):
                     )
                 except Exception as e:
                     print(f"⚠️  Failed to turn off ESP32 LED: {e}")
-        
+
         # Refresh the queryset after potential status changes
         user_bookings = Booking.objects.filter(user=self.request.user)
         for booking in user_bookings:
@@ -1937,16 +1937,16 @@ class BookingList(generics.ListCreateAPIView):
                 f"  - Booking {booking.id}: {booking.parking_spot.spot_number} ({booking.status})"
             )
         return user_bookings
-    
+
     def perform_create(self, serializer):
         try:
             print("=== Starting booking creation ===")
-            
+
             # Check if user already has an active booking
             existing_active_booking = Booking.objects.filter(
                 user=self.request.user, status="active"
             ).first()
-            
+
             if existing_active_booking:
                 print(f"User already has active booking: {existing_active_booking.id}")
                 raise serializers.ValidationError(
@@ -1954,11 +1954,11 @@ class BookingList(generics.ListCreateAPIView):
                         "non_field_errors": "You already have an active booking. Please cancel your current booking before making a new one."
                     }
                 )
-            
+
             # Get parking spot from parking_spot_id
             parking_spot_id = serializer.validated_data.get("parking_spot_id")
             print(f"Parking spot ID: {parking_spot_id}")
-            
+
             try:
                 parking_spot = ParkingSpot.objects.get(id=parking_spot_id)
                 print(f"Found parking spot: {parking_spot.spot_number}")
@@ -1967,7 +1967,7 @@ class BookingList(generics.ListCreateAPIView):
                 raise serializers.ValidationError(
                     {"parking_spot_id": "Parking spot not found."}
                 )
-            
+
             # Check if the parking spot is available
             if parking_spot.is_occupied:
                 print(f"Parking spot {parking_spot.spot_number} is occupied")
@@ -1986,12 +1986,12 @@ class BookingList(generics.ListCreateAPIView):
                         "non_field_errors": "Insufficient funds. Please top up your wallet."
                     }
                 )
-            
+
             # Create the booking with minimal data
             from django.utils import timezone
 
             now = timezone.now()
-            
+
             # Open-ended booking: no need for client to specify duration
             from datetime import timedelta
 
@@ -2008,22 +2008,22 @@ class BookingList(generics.ListCreateAPIView):
                 "grace_period_started": now,  # Start grace period; timer starts on detect
                 "timer_started": None,  # Timer will start when car is detected
             }
-            
+
             print(f"Creating booking with data: {booking_data}")
             booking = Booking.objects.create(**booking_data)
             print(f"✅ Booking created successfully: {booking.id}")
             print(f"🕐 Grace period started at: {now}")
             print(f"⏰ Timer will start when car is detected (within 10 seconds)")
-            
+
             # Trigger ESP32 LED control for the booked slot
             try:
                 trigger_esp32_booking_led(booking.parking_spot.spot_number, "blue")
                 print(f"🔵 Triggered blue LED for {booking.parking_spot.spot_number}")
             except Exception as e:
                 print(f"⚠️  Failed to trigger ESP32 LED: {e}")
-            
+
             return booking
-            
+
         except Exception as e:
             print(f"❌ Error in booking creation: {e}")
             import traceback
@@ -2035,7 +2035,7 @@ class BookingList(generics.ListCreateAPIView):
 class BookingDetail(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = BookingSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         # Admins can access any booking, regular users only their own
         if self.request.user.is_superuser:
@@ -2264,31 +2264,31 @@ def extend_booking(request, booking_id):
     try:
         print(f"Extend booking called for booking {booking_id}")
         print(f"Request data: {request.data}")
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         additional_minutes = request.data.get("additional_minutes", 0)
-        
+
         print(f"Additional minutes: {additional_minutes}")
-        
+
         if additional_minutes <= 0:
             return Response(
                 {"error": "Additional minutes must be greater than 0"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Update end time and duration
         from datetime import timedelta
 
         booking.end_time += timedelta(minutes=additional_minutes)
         booking.duration_minutes += additional_minutes
-        
+
         # Recalculate cost safely
         # NOTE: total_cost is now calculated by complete_active_booking using $1 per 30 seconds
         # This old hourly rate calculation has been removed to prevent conflicts
         # The total_cost should be set by the completion endpoint, not here
-        
+
         booking.save()
-        
+
         print(
             f"Booking extended successfully. New duration: {booking.duration_minutes} minutes"
         )
@@ -2300,7 +2300,7 @@ def extend_booking(request, booking_id):
             },
             status=status.HTTP_200_OK,
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2319,25 +2319,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -2351,16 +2351,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -2374,7 +2374,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2395,27 +2395,27 @@ def cancel_booking(request, booking_id):
         else:
             # Regular users can only cancel their own bookings
             booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         if booking.status != "active":
             return Response(
                 {"error": "Only active bookings can be cancelled"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Mark booking as cancelled
         booking.status = "cancelled"
         booking.save()
-        
+
         # Free up the parking spot
         parking_spot = booking.parking_spot
         parking_spot.is_occupied = False
         parking_spot.save()
-        
+
         # Try to control ESP32 (but don't fail if it doesn't work)
         try:
             import requests
             from iot_integration.models import IoTDevice
-            
+
             # Find the IoT device
             device = IoTDevice.objects.filter(device_type="sensor").first()
             if device:
@@ -2426,7 +2426,7 @@ def cancel_booking(request, booking_id):
                     "slot_number": parking_spot.spot_number,
                     "is_booked": False,
                 }
-                
+
                 response = requests.post(control_url, json=control_data, timeout=3)
                 if response.status_code == 200:
                     print(
@@ -2444,7 +2444,7 @@ def cancel_booking(request, booking_id):
         return Response(
             {"message": "Booking cancelled successfully"}, status=status.HTTP_200_OK
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2459,25 +2459,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -2491,16 +2491,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -2514,7 +2514,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2529,19 +2529,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -2553,7 +2553,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2568,25 +2568,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -2600,16 +2600,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -2623,7 +2623,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2640,10 +2640,10 @@ def get_parking_stats(request):
         # Get total parking spots
         total_spots = ParkingSpot.objects.count()
         available_spots = ParkingSpot.objects.filter(is_occupied=False).count()
-        
+
         # Get total bookings
         total_bookings = Booking.objects.count()
-        
+
         return Response(
             {
                 "total_spots": total_spots,
@@ -2652,7 +2652,7 @@ def get_parking_stats(request):
             },
             status=status.HTTP_200_OK,
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -2663,25 +2663,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -2695,16 +2695,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -2718,7 +2718,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2733,19 +2733,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes += overtime_minutes
         booking.overtime_cost += overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -2757,7 +2757,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2772,25 +2772,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -2804,16 +2804,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -2827,7 +2827,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2847,7 +2847,7 @@ def get_all_bookings_admin(request):
                 {"error": "Admin or staff access required"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
+
         # Get all bookings with related user, profile, and parking spot data
         bookings = (
             Booking.objects.select_related("user", "parking_spot", "user__profile")
@@ -2888,7 +2888,7 @@ def get_all_bookings_admin(request):
             )
 
         return Response(results, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -2899,25 +2899,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -2931,16 +2931,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -2954,7 +2954,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2969,19 +2969,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes += overtime_minutes
         booking.overtime_cost += overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -2993,7 +2993,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3008,25 +3008,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -3040,16 +3040,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -3063,7 +3063,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3083,25 +3083,25 @@ def get_all_users_admin(request):
                 {"error": "Admin or staff access required"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
+
         # Get all users
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
         users = User.objects.all().order_by("-date_joined")
-        
+
         # Get booking statistics for each user
         user_data = []
         for user in users:
             # Count user's bookings
             user_bookings = Booking.objects.filter(user=user)
             total_bookings = user_bookings.count()
-            
+
             # Calculate total spent from actual booking costs
             total_spent = sum(
                 booking.total_cost for booking in user_bookings if booking.total_cost
             )
-            
+
             # Get user profile information
             try:
                 profile = user.profile
@@ -3137,9 +3137,9 @@ def get_all_users_admin(request):
                     "wallet_balance": wallet_balance,
                 }
             )
-        
+
         return Response(user_data, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -3218,25 +3218,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -3250,16 +3250,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -3273,7 +3273,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3288,19 +3288,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -3312,7 +3312,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3327,25 +3327,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -3359,16 +3359,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -3382,7 +3382,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3401,7 +3401,7 @@ def create_user_admin(request):
             return Response(
                 {"error": "Superuser access required"}, status=status.HTTP_403_FORBIDDEN
             )
-        
+
         # Extract user data
         username = request.data.get("username")
         email = request.data.get("email")
@@ -3410,29 +3410,29 @@ def create_user_admin(request):
         last_name = request.data.get("last_name", "")
         is_staff = request.data.get("is_staff", False)
         is_superuser = request.data.get("is_superuser", False)
-        
+
         # Validate required fields
         if not all([username, email, password]):
             return Response(
                 {"error": "Username, email, and password are required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Check if user already exists
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
-        
+
         if User.objects.filter(username=username).exists():
             return Response(
                 {"error": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         if User.objects.filter(email=email).exists():
             return Response(
                 {"error": "Email already exists"}, status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Create the user
         user = User.objects.create_user(
             username=username,
@@ -3443,7 +3443,7 @@ def create_user_admin(request):
             is_staff=is_staff,
             is_superuser=is_superuser,
         )
-        
+
         # Create user profile for mobile app compatibility
         try:
             number_plate = (
@@ -3457,7 +3457,7 @@ def create_user_admin(request):
             print(f"UserProfile created for {username}")
         except Exception as e:
             print(f"Warning: Could not create UserProfile for {username}: {e}")
-        
+
         return Response(
             {
                 "message": "User created successfully",
@@ -3476,7 +3476,7 @@ def create_user_admin(request):
             },
             status=status.HTTP_201_CREATED,
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -3487,25 +3487,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -3519,16 +3519,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -3542,7 +3542,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3557,19 +3557,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -3581,7 +3581,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3596,25 +3596,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -3628,16 +3628,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -3651,7 +3651,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3670,19 +3670,19 @@ def update_user_admin(request, user_id):
             return Response(
                 {"error": "Superuser access required"}, status=status.HTTP_403_FORBIDDEN
             )
-        
+
         # Get the user to update
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
-        
+
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response(
                 {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # Update user fields
         if "username" in request.data:
             # Check if username is already taken by another user
@@ -3724,25 +3724,52 @@ def update_user_admin(request, user_id):
 
         if "is_superuser" in request.data:
             user.is_superuser = request.data["is_superuser"]
-        
+
         # Update password if provided
         if "password" in request.data and request.data["password"]:
             user.set_password(request.data["password"])
-        
+
         user.save()
 
-        # Update profile number plate if provided
+        # Update profile fields if provided
         try:
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+
+            # Update number plate
             if "number_plate" in request.data or "numberPlate" in request.data:
-                profile, _ = UserProfile.objects.get_or_create(user=user)
                 number_plate = request.data.get("number_plate") or request.data.get(
                     "numberPlate"
                 )
                 profile.address = number_plate or None
-                profile.save()
+                print(f"[update_user_admin] Updated number plate: {number_plate}")
+
+            # Update car name (license number)
+            if "car_name" in request.data:
+                car_name = request.data.get("car_name")
+                # Store separately if model has dedicated field; else keep for audit via address fallback
+                try:
+                    setattr(profile, "car_name", car_name or None)
+                except Exception:
+                    pass
+                print(f"[update_user_admin] Updated car name: {car_name}")
+
+            # Update phone
+            if "phone" in request.data:
+                profile.phone = request.data.get("phone") or None
+                print(f"[update_user_admin] Updated phone: {profile.phone}")
+
+            # Update wallet balance
+            if "balance" in request.data:
+                try:
+                    profile.balance = request.data.get("balance") or 0
+                    print(f"[update_user_admin] Updated balance: {profile.balance}")
+                except Exception as e:
+                    print(f"[update_user_admin] Could not set balance: {e}")
+
+            profile.save()
         except Exception as e:
-            print(f"Warning: could not update user profile number plate: {e}")
-        
+            print(f"Warning: could not update user profile: {e}")
+
         return Response(
             {
                 "message": "User updated successfully",
@@ -3761,7 +3788,7 @@ def update_user_admin(request, user_id):
             },
             status=status.HTTP_200_OK,
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -3772,25 +3799,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -3804,16 +3831,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -3827,7 +3854,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3842,19 +3869,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -3866,7 +3893,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3881,25 +3908,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -3913,16 +3940,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -3936,7 +3963,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -3955,35 +3982,35 @@ def delete_user_admin(request, user_id):
             return Response(
                 {"error": "Superuser access required"}, status=status.HTTP_403_FORBIDDEN
             )
-        
+
         # Get the user to delete
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
-        
+
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response(
                 {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # Prevent admin from deleting themselves
         if user.id == request.user.id:
             return Response(
                 {"error": "Cannot delete your own account"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Delete the user
         username = user.username
         user.delete()
-        
+
         return Response(
             {"message": f"User {username} deleted successfully"},
             status=status.HTTP_200_OK,
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -3994,25 +4021,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -4026,16 +4053,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -4049,7 +4076,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4064,19 +4091,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -4088,7 +4115,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4103,25 +4130,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -4135,16 +4162,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -4158,7 +4185,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4177,25 +4204,25 @@ def toggle_user_status_admin(request, user_id):
             return Response(
                 {"error": "Superuser access required"}, status=status.HTTP_403_FORBIDDEN
             )
-        
+
         # Get the user to toggle
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
-        
+
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response(
                 {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # Toggle the status
         user.is_active = not user.is_active
         user.save()
-        
+
         status_text = "activated" if user.is_active else "deactivated"
-        
+
         return Response(
             {
                 "message": f"User {user.username} {status_text} successfully",
@@ -4207,7 +4234,7 @@ def toggle_user_status_admin(request, user_id):
             },
             status=status.HTTP_200_OK,
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -4218,25 +4245,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -4250,16 +4277,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -4273,7 +4300,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4288,19 +4315,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -4312,7 +4339,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4327,25 +4354,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -4359,16 +4386,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -4382,7 +4409,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4401,19 +4428,19 @@ def reset_user_password_admin(request, user_id):
             return Response(
                 {"error": "Superuser access required"}, status=status.HTTP_403_FORBIDDEN
             )
-        
+
         # Get the user to reset password
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
-        
+
         try:
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response(
                 {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # Get the new password from request data
         new_password = request.data.get("new_password")
         if not new_password:
@@ -4421,11 +4448,11 @@ def reset_user_password_admin(request, user_id):
                 {"error": "New password is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Set the new password
         user.set_password(new_password)
         user.save()
-        
+
         # Invalidate all existing tokens for this user (force re-login)
         try:
             from rest_framework.authtoken.models import Token
@@ -4434,7 +4461,7 @@ def reset_user_password_admin(request, user_id):
             print(f"Invalidated all tokens for user {user.username}")
         except Exception as e:
             print(f"Warning: Could not invalidate tokens: {e}")
-        
+
         # Update the user profile with password reset timestamp
         try:
             from .models import UserProfile
@@ -4446,7 +4473,7 @@ def reset_user_password_admin(request, user_id):
             profile.save()
         except Exception as e:
             print(f"Warning: Could not update password reset timestamp: {e}")
-        
+
         return Response(
             {
                 "message": f"Password reset successfully for {user.username}",
@@ -4454,7 +4481,7 @@ def reset_user_password_admin(request, user_id):
             },
             status=status.HTTP_200_OK,
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -4465,25 +4492,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -4497,16 +4524,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -4520,7 +4547,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4535,19 +4562,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -4559,7 +4586,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4574,25 +4601,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -4606,16 +4633,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -4629,7 +4656,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4651,23 +4678,23 @@ def dashboard_reports(request):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
+
         from django.db.models import Count, Sum, Q
         from django.utils import timezone
         from datetime import timedelta
-        
+
         # Get date range (last 30 days by default)
         end_date = timezone.now()
         start_date = end_date - timedelta(days=30)
-        
+
         # Get total bookings in date range
         total_bookings = Booking.objects.filter(
             created_at__gte=start_date, created_at__lte=end_date
         ).count()
-        
+
         # Get active bookings
         active_bookings = Booking.objects.filter(status="active").count()
-        
+
         # Get completed bookings
         completed_bookings = Booking.objects.filter(status="completed").count()
 
@@ -4678,12 +4705,12 @@ def dashboard_reports(request):
             ).aggregate(total=Sum("total_cost"))["total"]
             or 0
         )
-        
+
         # Get slot distribution
         slot_distribution = ParkingSpot.objects.values("status").annotate(
             count=Count("id")
         )
-        
+
         # Get peak hours (bookings by hour)
         peak_hours = (
             Booking.objects.filter(created_at__gte=start_date, created_at__lte=end_date)
@@ -4739,7 +4766,7 @@ def dashboard_reports(request):
             },
             status=status.HTTP_200_OK,
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -4750,25 +4777,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -4782,16 +4809,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -4805,7 +4832,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4820,19 +4847,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -4844,7 +4871,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4859,25 +4886,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -4891,16 +4918,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -4914,7 +4941,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4936,19 +4963,19 @@ def user_statistics(request):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-        
+
         from django.contrib.auth.models import User
         from django.db.models import Count, Q
         from django.utils import timezone
         from datetime import timedelta
-        
+
         # Get date range (last 30 days by default)
         end_date = timezone.now()
         start_date = end_date - timedelta(days=30)
-        
+
         # Get total users
         total_users = User.objects.count()
-        
+
         # Get active users (users with bookings in last 30 days)
         active_users = (
             User.objects.filter(
@@ -4957,22 +4984,22 @@ def user_statistics(request):
             .distinct()
             .count()
         )
-        
+
         # Get new users in date range
         new_users = User.objects.filter(
             date_joined__gte=start_date, date_joined__lte=end_date
         ).count()
-        
+
         # Get staff users
         staff_users = User.objects.filter(is_staff=True).count()
-        
+
         # Get superusers
         superusers = User.objects.filter(is_superuser=True).count()
-        
+
         # Get users by status
         active_accounts = User.objects.filter(is_active=True).count()
         inactive_accounts = User.objects.filter(is_active=False).count()
-        
+
         return Response(
             {
                 "total_users": total_users,
@@ -4986,7 +5013,7 @@ def user_statistics(request):
             },
             status=status.HTTP_200_OK,
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -4997,25 +5024,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -5029,16 +5056,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -5052,7 +5079,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5067,19 +5094,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -5091,7 +5118,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5106,25 +5133,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -5138,16 +5165,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -5161,7 +5188,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5242,25 +5269,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -5274,16 +5301,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -5297,7 +5324,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5334,7 +5361,7 @@ def check_and_bill_overtime(request, booking_id):
                     "message": "Booking is not active",
                 }
             )
-        
+
         # Check if booking has expired
         if not booking.is_expired():
             return Response(
@@ -5346,14 +5373,14 @@ def check_and_bill_overtime(request, booking_id):
                     "message": "Booking has not expired yet",
                 }
             )
-        
+
         # Check if 5 seconds have passed since expiry
         from django.utils import timezone
         from datetime import timedelta
 
         now = timezone.now()
         time_since_expiry = now - booking.end_time
-        
+
         if time_since_expiry.total_seconds() < 5:
             # Still in grace period, no overtime yet
             return Response(
@@ -5367,23 +5394,23 @@ def check_and_bill_overtime(request, booking_id):
                     "message": "Still in 5-second grace period",
                 }
             )
-        
+
         # Update overtime billing (starts after 5 seconds)
         overtime_minutes, overtime_cost = booking.update_overtime_billing()
-        
+
         # Send overtime alert notification
         NotificationService.send_overtime_alert(booking)
-        
+
         # Check if car is still parked (red light on) using IoT
         is_still_parked = check_if_car_still_parked(booking.parking_spot)
-        
+
         if is_still_parked:
             # Car still parked - continue overtime billing
             # Turn on red light if not already on
             if not booking.iot_overtime_start:
                 trigger_esp32_booking_led(booking.parking_spot.spot_number, "red")
                 print(f"🔴 Red light ON for overtime booking {booking.id}")
-            
+
             return Response(
                 {
                     "overtime_minutes": overtime_minutes,
@@ -5403,18 +5430,18 @@ def check_and_bill_overtime(request, booking_id):
                 final_overtime_minutes, final_overtime_cost = (
                     booking.handle_iot_green_light()
                 )
-                
+
                 # Mark as completed (keep slot occupied)
                 booking.status = "completed"
                 booking.save()
-                
+
                 # Send completion notification
                 NotificationService.send_booking_completion_notification(booking)
-                
+
                 # Turn off red light (green light is now on)
                 trigger_esp32_booking_led(booking.parking_spot.spot_number, False)
                 print(f"🟢 Green light ON - Car left, booking {booking.id} completed")
-                
+
                 return Response(
                     {
                         "overtime_minutes": final_overtime_minutes,
@@ -5441,7 +5468,7 @@ def check_and_bill_overtime(request, booking_id):
                     "message": "Car has left - overtime calculation complete",
                 }
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5456,25 +5483,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -5488,16 +5515,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -5511,7 +5538,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5526,19 +5553,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -5550,7 +5577,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5565,25 +5592,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -5597,16 +5624,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -5620,7 +5647,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5637,7 +5664,7 @@ def get_active_overtime_bookings(request):
         active_bookings = Booking.objects.filter(
             user=request.user, status="active", is_overtime=True
         )
-        
+
         overtime_data = []
         for booking in active_bookings:
             overtime_minutes, overtime_cost = booking.calculate_overtime()
@@ -5662,7 +5689,7 @@ def get_active_overtime_bookings(request):
                 ),
             }
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -5673,25 +5700,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -5705,16 +5732,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -5728,7 +5755,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5743,19 +5770,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -5767,7 +5794,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5782,25 +5809,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -5814,16 +5841,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -5837,7 +5864,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5852,33 +5879,33 @@ def check_if_car_still_parked(parking_spot):
         from iot_integration.models import IoTDevice, SensorData
         from django.utils import timezone
         from datetime import timedelta
-        
+
         # Use the same logic as get_parking_availability
         # Check for recent sensor data (within last 60 seconds)
         recent_sensor_data = SensorData.objects.filter(
             timestamp__gte=timezone.now() - timedelta(seconds=60)
         ).exists()
-        
+
         if not recent_sensor_data:
             # No recent sensor data - ESP32 is offline, use parking spot status
             print(
                 f"⚠️  No recent sensor data for {parking_spot.spot_number}, using parking spot status"
             )
             return parking_spot.is_occupied
-        
+
         # ESP32 is online - get real-time data using same logic as home page
         devices = IoTDevice.objects.filter(is_active=True).order_by("id")
-        
+
         # Map slot names to device indices (same as home page logic)
         slot_mapping = {"Slot A": 0, "Slot B": 1}
         device_index = slot_mapping.get(parking_spot.spot_number)
-        
+
         if device_index is not None and device_index < devices.count():
             device = devices[device_index]
             latest_data = (
                 SensorData.objects.filter(device=device).order_by("-timestamp").first()
             )
-            
+
             if latest_data:
                 # Check if sensor data is recent (within last 60 seconds)
                 time_diff = timezone.now() - latest_data.timestamp
@@ -5901,7 +5928,7 @@ def check_if_car_still_parked(parking_spot):
                     else:
                         # Fallback to general occupancy
                         is_occupied = latest_data.is_occupied
-                    
+
                     print(
                         f"🔍 IoT Sensor check for {parking_spot.spot_number}: {'Occupied' if is_occupied else 'Available'} (device {device_index})"
                     )
@@ -5910,13 +5937,13 @@ def check_if_car_still_parked(parking_spot):
                     print(
                         f"⚠️  Sensor data too old for {parking_spot.spot_number} ({time_diff.total_seconds():.0f}s ago)"
                     )
-        
+
         # Fallback: use parking spot status (which should be updated by get_parking_availability)
         print(
             f"⚠️  Using parking spot status for {parking_spot.spot_number}: {'Occupied' if parking_spot.is_occupied else 'Available'}"
         )
         return parking_spot.is_occupied
-        
+
     except Exception as e:
         print(f"⚠️  Error checking car occupancy for {parking_spot.spot_number}: {e}")
         # Final fallback to parking spot status
@@ -5930,7 +5957,7 @@ def get_parking_spot_led_status(request, spot_number):
     try:
         from iot_integration.models import IoTDevice, SensorData
         from django.utils import timezone
-        
+
         # Find the parking spot
         try:
             parking_spot = ParkingSpot.objects.get(spot_number=spot_number)
@@ -5938,35 +5965,35 @@ def get_parking_spot_led_status(request, spot_number):
             return Response(
                 {"error": "Parking spot not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # Get the latest sensor data for this spot using same logic as home page
         devices = IoTDevice.objects.filter(is_active=True).order_by("id")
         slot_mapping = {"Slot A": 0, "Slot B": 1}
         device_index = slot_mapping.get(parking_spot.spot_number)
-        
+
         latest_sensor_data = None
         if device_index is not None and device_index < devices.count():
             device = devices[device_index]
             latest_sensor_data = (
                 SensorData.objects.filter(device=device).order_by("-timestamp").first()
             )
-        
+
         # Determine LED status based on booking and sensor data
         led_status = "off"  # Default: no light
         led_color = "none"
         led_message = "No active booking"
-        
+
         # Check if there's an active booking for this spot
         active_booking = Booking.objects.filter(
             parking_spot=parking_spot, status="active"
         ).first()
-        
+
         if active_booking:
             # Check if booking is in overtime
             if active_booking.is_overtime:
                 # Check if car is still parked (red light)
                 is_car_still_parked = check_if_car_still_parked(parking_spot)
-                
+
                 if is_car_still_parked:
                     led_status = "on"
                     led_color = "red"
@@ -5980,12 +6007,12 @@ def get_parking_spot_led_status(request, spot_number):
                 led_status = "on"
                 led_color = "blue"
                 led_message = "ACTIVE BOOKING - Normal parking time"
-        
+
         # Get sensor data info using same logic as home page
         sensor_info = None
         if latest_sensor_data:
             time_diff = timezone.now() - latest_sensor_data.timestamp
-            
+
             # Use dual sensor data if available (same as home page logic)
             is_occupied = latest_sensor_data.is_occupied
             if (
@@ -6000,7 +6027,7 @@ def get_parking_spot_led_status(request, spot_number):
                         if hasattr(latest_sensor_data, "slot2_occupied")
                         else latest_sensor_data.is_occupied
                     )
-            
+
             sensor_info = {
                 "is_occupied": is_occupied,
                 "last_seen_seconds_ago": int(time_diff.total_seconds()),
@@ -6025,7 +6052,7 @@ def get_parking_spot_led_status(request, spot_number):
                 "last_updated": timezone.now().isoformat(),
             }
         )
-        
+
     except Exception as e:
         print(f"Error getting LED status for spot {spot_number}: {e}")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -6037,25 +6064,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -6069,16 +6096,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -6092,7 +6119,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -6107,29 +6134,29 @@ def complete_overtime_booking(request, booking_id):
     """Manually complete an overtime booking (when car leaves)"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         if booking.status != "active":
             return Response(
                 {"error": "Booking is not active"}, status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Calculate final overtime
         overtime_minutes, overtime_cost = booking.update_overtime_billing()
-        
+
         # Update total cost to include overtime
         base_cost = float(booking.total_cost or 0)
         booking.total_cost = base_cost + float(overtime_cost)
-        
+
         # Mark as completed (keep slot occupied)
         booking.status = "completed"
         booking.save()
-        
+
         # Send completion notification
         NotificationService.send_booking_completion_notification(booking)
-        
+
         # Trigger ESP32 to turn off red light
         trigger_esp32_booking_led(booking.parking_spot.spot_number, False)
-        
+
         return Response(
             {
                 "message": "Overtime booking completed successfully",
@@ -6140,7 +6167,7 @@ def complete_overtime_booking(request, booking_id):
                 "status": "completed",
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -6155,25 +6182,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -6187,16 +6214,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -6210,7 +6237,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -6225,19 +6252,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -6249,7 +6276,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -6264,25 +6291,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -6296,16 +6323,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -6319,7 +6346,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -6339,25 +6366,25 @@ def check_all_overtime_bookings(request):
         expired_bookings = Booking.objects.filter(status="active").exclude(
             end_time__gt=timezone.now()
         )
-        
+
         processed_bookings = []
-        
+
         for booking in expired_bookings:
             try:
                 # Calculate overtime
                 overtime_minutes, overtime_cost = booking.calculate_overtime()
-                
+
                 if overtime_minutes > 0:
                     # Update overtime billing
                     booking.update_overtime_billing()
-                    
+
                     # Check if car is still parked
                     is_still_parked = check_if_car_still_parked(booking.parking_spot)
-                    
+
                     if is_still_parked:
                         # Send overtime alert notification
                         NotificationService.send_overtime_alert(booking)
-                        
+
                         processed_bookings.append(
                             {
                                 "booking_id": booking.id,
@@ -6376,15 +6403,15 @@ def check_all_overtime_bookings(request):
                         # Update total cost to include overtime
                         base_cost = float(booking.total_cost or 0)
                         booking.total_cost = base_cost + float(overtime_cost)
-                        
+
                         booking.status = "completed"
                         booking.save()
-                        
+
                         # Send completion notification
                         NotificationService.send_booking_completion_notification(
                             booking
                         )
-                        
+
                         # Trigger ESP32 to turn off red light
                         trigger_esp32_booking_led(
                             booking.parking_spot.spot_number, False
@@ -6403,17 +6430,17 @@ def check_all_overtime_bookings(request):
                                 "status": "completed",
                             }
                         )
-                        
+
             except Exception as e:
                 print(f"Error processing booking {booking.id}: {e}")
-        
+
         return Response(
             {
                 "message": f"Processed {len(processed_bookings)} overtime bookings",
                 "processed_bookings": processed_bookings,
             }
         )
-        
+
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -6424,25 +6451,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -6456,16 +6483,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -6479,7 +6506,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -6494,19 +6521,19 @@ def test_update_booking_cost(request, booking_id):
     """Test endpoint to manually update booking total cost with overtime"""
     try:
         booking = Booking.objects.get(id=booking_id, user=request.user)
-        
+
         # Get overtime data
         overtime_minutes = request.data.get("overtime_minutes", 0)
         overtime_cost = request.data.get("overtime_cost", 0)
-        
+
         # Update overtime fields
         booking.overtime_minutes = overtime_minutes
         booking.overtime_cost = overtime_cost
         booking.is_overtime = overtime_minutes > 0
-        
+
         # Save to trigger the model's save method
         booking.save()
-        
+
         return Response(
             {
                 "message": "Booking cost updated successfully",
@@ -6518,7 +6545,7 @@ def test_update_booking_cost(request, booking_id):
                 "overtime_minutes": booking.overtime_minutes,
             }
         )
-        
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
@@ -6533,25 +6560,25 @@ def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
     try:
         from django.utils import timezone
-        
+
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
-        
+
         # Check if grace period is still active (within 10 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
-            
+
             if grace_elapsed <= 10:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 print(
                     f"✅ Car detected for booking {booking_id} - Timer started at {now}"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -6565,16 +6592,16 @@ def detect_car_parked(request, booking_id):
                 booking.status = "cancelled"
                 booking.grace_period_ended = now
                 booking.save()
-                
+
                 # Free up the parking spot
                 booking.parking_spot.is_occupied = False
                 booking.parking_spot.save()
-                
+
                 print(
                     f"❌ Grace period expired for booking {booking_id} - Auto-cancelled"
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
-                
+
                 return Response(
                     {
                         "message": "Grace period expired. Booking cancelled.",
@@ -6588,7 +6615,7 @@ def detect_car_parked(request, booking_id):
                 {"error": "No grace period found for this booking"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
+
     except Booking.DoesNotExist:
         return Response(
             {"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND
