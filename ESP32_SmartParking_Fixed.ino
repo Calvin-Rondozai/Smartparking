@@ -6,7 +6,7 @@
 const char* ssid = "Redmi Note 11 Pro";
 const char* password = "esskeetit";
 
-// Server Configuration - FIXED: Removed extra '1' from IP
+// Server Configuration - FIXED: Use the correct server IP
 const char* serverUrl = "http://10.187.189.47:8000/api/iot/";
 const char* deviceId = "ESP32_DUAL_SENSOR_001";
 
