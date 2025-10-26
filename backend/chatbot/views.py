@@ -175,63 +175,640 @@ def help_info(request):
     )
 
 
+# Helper functions for WhatsApp webhook - exactly matching mobile app logic
+def parse_whatsapp_intent(raw):
+    """Parse user intent from WhatsApp message - matches mobile app logic"""
+    import re
+
+    if not raw:
+        return {"type": "none"}
+
+    s = re.sub(r"\s+", " ", raw.lower()).strip()
+
+    # Greeting
+    if re.match(r"^(hi|hello|hey)\b", s):
+        return {"type": "greet"}
+
+    # Goodbye
+    if re.search(r"\b(bye|goodbye|see you|thanks,? bye)\b", s):
+        return {"type": "goodbye"}
+
+    # Help
+    if re.search(r"(help|manual|how to|guide|instructions)", s):
+        return {"type": "help"}
+
+    # Current booking
+    if re.search(r"(current|my booking|time left|remaining)", s):
+        return {"type": "current"}
+
+    # Book/Slot
+    if re.search(r"\bslot\s*a\b|\ba\b(?!\w)", s):
+        return {"type": "reserve", "slot": "A"}
+    if re.search(r"\bslot\s*b\b|\bb\b(?!\w)", s):
+        return {"type": "reserve", "slot": "B"}
+
+    # Reserve/Book intent
+    if re.search(r"(reserve|book|hold|save)\b", s):
+        slot = None
+        if re.search(r"\bslot\s*a\b|\ba\b(?!\w)", s):
+            slot = "A"
+        elif re.search(r"\bslot\s*b\b|\bb\b(?!\w)", s):
+            slot = "B"
+        return {"type": "reserve", "slot": slot}
+
+    # Cancel
+    if re.search(r"(cancel|stop|end|terminate|delete)\b", s) or s == "cancel":
+        return {"type": "cancel"}
+
+    # Balance
+    if re.search(r"(balance|wallet)", s):
+        return {"type": "balance"}
+
+    # Bookings/History
+    if re.search(r"(bookings|history)", s):
+        return {"type": "bookings"}
+
+    # Extend
+    if re.search(r"(extend|add|increase)\b", s):
+        minutes_match = re.search(r"(\d+)", s)
+        minutes = int(minutes_match.group(1)) if minutes_match else None
+        return {"type": "extend", "minutes": minutes}
+
+    # Report
+    if re.search(r"(report|issue|problem|complaint)", s):
+        return {"type": "report"}
+
+    # Date search
+    date_match = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", s)
+    if date_match:
+        return {"type": "search_date", "date": date_match.group(1)}
+
+    # Slots/Available
+    if re.search(r"(slots|available)", s):
+        return {"type": "slots"}
+
+    return {"type": "unknown"}
+
+
+def get_whatsapp_user(from_number):
+    """Get or create user for WhatsApp number"""
+    from parking_app.models import UserProfile
+    from django.contrib.auth.models import User
+
+    from_number_clean = from_number.replace("+", "").replace(" ", "")
+    username = f"whatsapp_{from_number_clean}"
+
+    try:
+        return User.objects.get(username=username)
+    except User.DoesNotExist:
+        user = User.objects.create_user(
+            username=username,
+            email=f"{username}@whatsapp.local",
+            password="".join(
+                [
+                    str(int(from_number_clean[i : i + 2]) % 10)
+                    for i in range(min(8, len(from_number_clean)))
+                ]
+            ),
+        )
+        UserProfile.objects.create(
+            user=user,
+            phone_number=from_number_clean,
+            balance=100.00,
+        )
+        return user
+
+
 @csrf_exempt
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def twilio_whatsapp_webhook(request):
     """
-    Twilio WhatsApp webhook endpoint for basic chatbot functionality.
+    Twilio WhatsApp webhook endpoint - matches mobile chatbot logic exactly.
     Configure Twilio WhatsApp webhook URL to: /api/chatbot/twilio/webhook/
     """
-    try:
-        body = (request.data.get("Body") or "").strip()
-        body_lower = body.lower()
+    from django.conf import settings
+    from parking_app.models import UserProfile, ParkingSpot
+    from django.contrib.auth.models import User
+    from datetime import timedelta
+    from django.utils import timezone
+    from parking_app.serializers import BookingSerializer
+    import re
 
-        def reply_text(text: str) -> HttpResponse:
-            if MessagingResponse is None:
-                return HttpResponse(text, content_type="text/plain")
-            resp = MessagingResponse()
-            resp.message(text)
-            return HttpResponse(str(resp), content_type="application/xml")
+    # Translation support for multi-language (English, Shona, Ndebele)
+    translations = {
+        "en": {
+            "greet": "Hi👋! I'm Calvin, your Smart Parking assistant!",
+            "menu": "What would you like to do?\n\n1️⃣ Book a slot\n2️⃣ Check current booking\n3️⃣ View booking history\n4️⃣ Search bookings by date\n5️⃣ Report an issue\n6️⃣ Help & Support\n7️⃣ Check balance\n8️⃣ Language\n\nJust type the number (1-8) to select an option!\n\n💡 Tip: Type 'menu' anytime to return here!",
+            "booked": lambda slot: f'✅ Successfully booked Slot {slot}!\n\n📱 Navigate to the "Current Bookings" page to view your booking details.',
+            "expiry_warn": "⏰ Time expired before you entered the slot.",
+            "left_slot": lambda amount: f"🚗 You left the slot. Amount charged: ${amount:.2f}.",
+            "receipt": lambda data: f"🧾 PARKING RECEIPT\n━━━━━━━━━━━━━━━━━━━━\n📍 Slot: {data['slot']}\n🕐 Parked: {data['startTime']}\n🕑 Left: {data['endTime']}\n⏱️ Duration: {data['duration']}\n💰 Amount: ${data['amount']:.2f}\n💳 Balance: ${data['balance']:.2f}\n━━━━━━━━━━━━━━━━━━━━\n✅ Payment successful!\n\nThank you for using Smart Parking! 🚗",
+            "balance_is": lambda bal: f"💳 Your wallet balance is ${bal:.2f}.",
+            "choose_lang": "🌐 Choose language:\n \n1. English \n2. Shona \n3. Ndebele",
+            "lang_set": lambda l: f"✅ Language set to {l}.",
+            "available_intro": "🅿️ Here's what I have right now",
+            "tap_to_reserve": "👆 Tap a slot below to reserve.",
+            "occupied_start": "✅ Car parked successfully! Timer started.",
+            "parking_confirmed": lambda slot: f"🚗 You're now parked in {slot}!\n⏰ Timer is running - you'll be charged $1 per 30 seconds.\n🔴 Red light indicates your slot is occupied.",
+            "no_booking": "❌ You don't have an active booking.",
+            "booking_cancelled": "✅ Booking cancelled successfully!",
+            "booking_extended": lambda minutes: f"✅ Booking extended by {minutes} minutes!",
+            "no_bookings": "📋 You have no bookings yet.",
+            "no_slots": "🚫 No slots available right now.",
+            "slot_not_available": lambda slot: f"❌ Slot {slot} is not available right now.",
+            "reservation_failed": "❌ Reservation failed. Please try again.",
+            "system_offline": "⚠️ Cannot perform action while IoT system is offline.",
+            "grace_countdown": lambda seconds: f"⏳ {seconds}s remaining in grace period...",
+            "invalid_date": "❌ Please enter a valid date in YYYY-MM-DD format.",
+            "report_too_short": "❌ Please provide more details (at least 10 characters).",
+            "report_sent": "✅ Thank you for your report! I've forwarded it to the admin team.",
+            "report_failed": "❌ Sorry, there was an issue sending your report.",
+            "goodbye": "👋 Goodbye! Drive safe 🚗✨\n\nIf you need anything else, just say 'hi' or 'menu'!",
+            "help_message": "ℹ️ Here to help! Try saying: show available slots, reserve A, or my bookings.",
+            "invalid_option": "❌ Invalid option. Please type a number between 1-8.",
+            "didnt_understand": "🤔 I didn't understand that. Type 'menu' to see available options, or try:\n• 'book slot' - Make a reservation\n• 'my booking' - Check current booking\n• 'balance' - Check wallet balance",
+        },
+        "sn": {
+            "greet": "Mhoro! Ndini Calvin, mubatsiri weSmart Parking! 🤖",
+            "menu": "Ungadei kuita?\n\n1️⃣ Bhuka slot\n2️⃣ Tarisa booking yazvino\n3️⃣ Ongorora nhoroondo\n4️⃣ Tsvaga ma bookings nezuva\n5️⃣ Tumira dambudziko\n6️⃣ Rubatsiro & Support\n7️⃣ Tarisa balance\n8️⃣ Mutauro\n\nNyora nhamba (1-8) kusarudza!\n\n💡 Nyora 'menu' kudzokera pano!",
+            "booked": lambda slot: f'✅ Wabhuka pa Slot {slot}!\n\n📱 Enda ku "Current Bookings" page kuti uone booking yako.',
+            "expiry_warn": "⏰ Nguva yapera usati wapinda mu slot.",
+            "left_slot": lambda amount: f"🚗 Wabuda pa slot. Wakabhadharwa: ${amount:.2f}.",
+            "receipt": lambda data: f"🧾 RECEIPT YE PARKING\n━━━━━━━━━━━━━━━━━━━━\n📍 Slot: {data['slot']}\n🕐 Wakapinda: {data['startTime']}\n🕑 Wabuda: {data['endTime']}\n⏱️ Nguva: {data['duration']}\n💰 Mari: ${data['amount']:.2f}\n💳 Balance: ${data['balance']:.2f}\n━━━━━━━━━━━━━━━━━━━━\n✅ Kubhadhara kwabudirira!\n\nTinokutenda kushandisa Smart Parking! 🚗",
+            "balance_is": lambda bal: f"💳 Balance yako ndeye ${bal:.2f}.",
+            "choose_lang": "🌐 Sarudza mutauro: 1) Chirungu 2) Shona 3) Ndebele",
+            "lang_set": lambda l: f"✅ Mutauro wasarudzwa: {l}.",
+            "available_intro": "🅿️ Zviripo pari zvino",
+            "tap_to_reserve": "👆 Dzvanya slot pasi apa kuti ubhuke.",
+            "occupied_start": "✅ Mota yakamira! Timer yatanga.",
+            "parking_confirmed": lambda slot: f"🚗 Zvino wamira pa {slot}!\n⏰ Timer iri kushanda - uchabhadharwa $1 pa30 seconds.\n🔴 Chiedza chitsvuku chinoratidzira kuti slot yako ine mota.",
+            "no_booking": "❌ Hauna booking yauri kushandisa.",
+            "booking_cancelled": "✅ Booking yakanzurwa!",
+            "booking_extended": lambda minutes: f"✅ Booking yakawedzerwa neminutes {minutes}!",
+            "no_bookings": "📋 Hauna ma bookings.",
+            "no_slots": "🚫 Hapana ma slots aripo pari zvino.",
+            "slot_not_available": lambda slot: f"❌ Slot {slot} haina kuwanikwa pari zvino.",
+            "reservation_failed": "❌ Kubhuka kwakundikana. Edza zvakare.",
+            "system_offline": "⚠️ Haigone kuita izvi IoT system isiri kushanda.",
+            "grace_countdown": lambda seconds: f"⏳ {seconds}s yasara mu grace period...",
+            "invalid_date": "❌ Isa zuva rakanaka mu YYYY-MM-DD format.",
+            "report_too_short": "❌ Ipa mamwe mashoko (anoda 10 characters).",
+            "report_sent": "✅ Tinokutenda! Ndatumira report yako ku admin team.",
+            "report_failed": "❌ Pane dambudziko rekutumira report yako.",
+            "goodbye": "👋 Chisarai! Tyaira wakachengeteka 🚗✨\n\nKana uchida chimwe chinhu, iti 'hi' kana 'menu'!",
+            "help_message": "ℹ️ Ndiri pano kubatsira! Edza kuti: ratidza ma slots, bhuka A, kana ma bookings angu.",
+            "invalid_option": "❌ Nhamba isina kukwana. Isa nhamba iri pakati pe1-8.",
+            "didnt_understand": "🤔 Handina kunzwisisa izvo. Nyora 'menu' kuona zvinoitwa, kana:\n• 'book slot' - Bhuka nzvimbo\n• 'my booking' - Tarisa booking yako\n• 'balance' - Tarisa mari yako",
+        },
+        "nd": {
+            "greet": "Sawubona! Ngingu Calvin, umsizi weSmart Parking! 🤖",
+            "menu": "Ufuna ukwenzani?\n\n1️⃣ Bhuka i-slot\n2️⃣ Bheka i-booking yamanje\n3️⃣ Bukela umlando\n4️⃣ Sesha ama booking ngosuku\n5️⃣ Bika inkinga\n6️⃣ Usizo & Support\n7️⃣ Bheka ibhalansi\n8️⃣ Ulimi\n\nBhala inombolo (1-8) ukukhetha!\n\n💡 Bhala 'menu' ukubuyela lapha!",
+            "booked": lambda slot: f'✅ Ubukhile i-Slot {slot}!\n\n📱 Hamba ku "Current Bookings" page ukubona i-booking yakho.',
+            "expiry_warn": "⏰ Isikhathi siphelile ungakangenisi imoto.",
+            "left_slot": lambda amount: f"🚗 Usushiyile i-slot. Ukhokhisiwe: ${amount:.2f}.",
+            "receipt": lambda data: f"🧾 I-RECEIPT YE PARKING\n━━━━━━━━━━━━━━━━━━━━\n📍 I-Slot: {data['slot']}\n🕐 Wangena: {data['startTime']}\n🕑 Waphuma: {data['endTime']}\n⏱️ Isikhathi: {data['duration']}\n💰 Imali: ${data['amount']:.2f}\n💳 Ibhalansi: ${data['balance']:.2f}\n━━━━━━━━━━━━━━━━━━━━\n✅ Ukukhokhela kuphumelele!\n\nSiyabonga ukusebenzisa Smart Parking! 🚗",
+            "balance_is": lambda bal: f"💳 Ibhalaansi yakho ${bal:.2f}.",
+            "choose_lang": "🌐 Khetha ulimi: 1) English 2) Shona 3) Ndebele",
+            "lang_set": lambda l: f"✅ Ulimi lubekiwe: {l}.",
+            "available_intro": "🅿️ Okukhona manje",
+            "tap_to_reserve": "👆 Thepha i-slot ngezansi ukuze ubhuke.",
+            "occupied_start": "✅ Imoto imisiwe! Isikhathi siqalile.",
+            "parking_confirmed": lambda slot: f"🚗 Manje umisile e {slot}!\n⏰ Isikhathi siyasebenza - uzakhokhiswa $1 nge30 seconds.\n🔴 Ukukhanya okubomvu kuveza ukuthi i-slot yakho inemoto.",
+            "no_booking": "❌ Awunayo i-booking esebenzayo.",
+            "booking_cancelled": "✅ I-booking icinyiwe ngempumelelo!",
+            "booking_extended": lambda minutes: f"✅ I-booking yelulwe ngemizuzu engu{minutes}!",
+            "no_bookings": "📋 Awunayo ama-booking okwamanje.",
+            "no_slots": "🚫 Azikho izindawo ezitholakalayo manje.",
+            "slot_not_available": lambda slot: f"❌ I-Slot {slot} ayitholakali manje.",
+            "reservation_failed": "❌ Ukubhuka kuhlulekile. Zama futhi.",
+            "system_offline": "⚠️ Ngeke kwenziwe lokhu ngoba i-IoT system ayisebenzi.",
+            "grace_countdown": lambda seconds: f"⏳ {seconds}s esele ku-grace period...",
+            "invalid_date": "❌ Faka usuku olulungile nge-YYYY-MM-DD format.",
+            "report_too_short": "❌ Nikeza imininingwane eyengeziwe (okungenani amagama ayi-10).",
+            "report_sent": "✅ Siyabonga! Ngithumele umbiko wakho ku-admin team.",
+            "report_failed": "❌ Uxolo, kukhona inkinga yokuthumela umbiko wakho.",
+            "goodbye": "👋 Hamba kahle! Shayela uphephile 🚗✨\n\nUma udinga okunye, yithi 'hi' noma 'menu'!",
+            "help_message": "ℹ️ Ngilapha ukusiza! Zama ukuthi: khombisa ama-slots atholakalayo, bhuka A, noma ama-booking ami.",
+            "invalid_option": "❌ Inombolo engalungile. Bhala inombolo ephakathi kuka-1-8.",
+            "didnt_understand": "🤔 Angikuqondile lokho. Bhala 'menu' ukubona ongakwenza, noma:\n• 'book slot' - Bhuka indawo\n• 'my booking' - Bheka i-booking yakho\n• 'balance' - Bheka imali yakho",
+        },
+    }
 
-        if not body:
-            return reply_text("Hi, I'm Calvin 🤖. Reply with 'menu' to see options.")
+    def t(key, *args):
+        # Get user's language preference from session, default to English
+        lang = request.session.get("whatsapp_language", "en")
+        trans = translations.get(lang, translations["en"])
+        val = trans.get(key)
+        if callable(val):
+            return val(*args)
+        return val or key
 
-        # Basic commands for WhatsApp
-        if body_lower in ("hi", "hello", "menu"):
-            msg = (
-                "Hi👋! I'm Calvin, your Smart Parking assistant!\n\n"
-                "1) Book a slot\n2) Current booking\n3) Booking history\n4) Available slots\n5) Help\n\n"
-                "Reply with a number or command."
-            )
-            return reply_text(msg)
+    def reply_text(text: str) -> HttpResponse:
+        if MessagingResponse is None:
+            return HttpResponse(text, content_type="text/plain")
+        resp = MessagingResponse()
+        resp.message(text)
+        return HttpResponse(str(resp), content_type="application/xml")
 
-        if "current" in body_lower or "my booking" in body_lower:
-            return reply_text(
-                "To view your current booking, please use the mobile app."
-            )
+    # Intent parsing helpers
+    def normalize(s):
+        if not s:
+            return ""
+        return re.sub(r"\s+", " ", s.lower()).strip()
 
-        if "available" in body_lower or "slots" in body_lower:
-            spots = ParkingSpot.objects.filter(is_occupied=False)[:2]
-            if not spots:
-                return reply_text("No slots available right now.")
-            names = [getattr(s, "spot_number", f"Slot {s.id}") for s in spots]
-            return reply_text("Available: " + ", ".join(names))
+    def extract_slot(s):
+        if re.search(r"\bslot\s*a\b|\ba\b(?!\w)", s, re.I):
+            return "A"
+        if re.search(r"\bslot\s*b\b|\bb\b(?!\w)", s, re.I):
+            return "B"
+        return None
 
-        if body_lower.startswith("reserve"):
-            return reply_text(
-                "Reservation via WhatsApp is not enabled yet. Please use the app to reserve."
-            )
+    def extract_date(s):
+        m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", s)
+        return m.group(1) if m else None
 
-        if "help" in body_lower:
-            return reply_text(
-                "Try: 'menu', 'available slots', 'current booking', or use the app to reserve."
-            )
+    def is_greet(s):
+        return bool(re.match(r"^(hi|hello|hey)\b", s.lower()))
 
-        # Default fallback
-        return reply_text(
-            "I didn't understand that. Reply 'menu' to see options, or use the app."
+    def is_goodbye(s):
+        return bool(re.search(r"\b(bye|goodbye|see you|thanks,? bye)\b", s.lower()))
+
+    def is_help(s):
+        return bool(re.search(r"(help|manual|how to|guide|instructions)", s.lower()))
+
+    def is_current_booking(s):
+        return bool(re.search(r"(current|my booking|time left|remaining)", s.lower()))
+
+    def is_reserve_intent(s):
+        return bool(re.search(r"(reserve|book|hold|save)\b", s.lower())) and bool(
+            re.search(r"(slot|\b[a|b]\b|#|\d)", s.lower())
         )
 
+    def is_extend_intent(s):
+        return bool(re.search(r"(extend|add|increase)\b", s.lower())) and bool(
+            re.search(r"(minute|min|hour|hr|hrs|\d+)", s.lower())
+        )
+
+    def is_cancel_intent(s):
+        return bool(
+            (
+                re.search(r"(cancel|stop|end|terminate|delete)\b", s.lower())
+                and re.search(r"(booking|reservation|slot|my booking)", s.lower())
+            )
+            or s.lower().strip() == "cancel"
+        )
+
+    def is_report_intent(s):
+        return bool(
+            re.search(r"(report|issue|problem|complaint|bug|error|feedback)", s.lower())
+        )
+
+    try:
+        body = (request.data.get("Body") or "").strip()
+        from_number = request.data.get("From", "").replace("whatsapp:", "")
+        body_lower = body.lower().strip()
+
+        # Helper function to get user
+        def get_user():
+            return get_whatsapp_user(from_number)
+
+        if not body:
+            return reply_text(
+                "Hi👋! I'm Calvin, your Smart Parking assistant!\n\nReply with 'menu' to see options!"
+            )
+
+        # Initialize session
+        if "whatsapp_conversation" not in request.session:
+            request.session["whatsapp_conversation"] = True
+            request.session["whatsapp_flow"] = "idle"
+            request.session["whatsapp_language"] = "en"
+            request.session["whatsapp_menu_mode"] = False
+
+        # Parse intent using global function
+        intent = parse_whatsapp_intent(body)
+        flow = request.session.get("whatsapp_flow", "idle")
+        menu_mode = request.session.get("whatsapp_menu_mode", False)
+
+        # Handle greeting and menu
+        if intent["type"] == "greet" or body_lower in ("hi", "hello", "menu", "hey"):
+            msg = f"{t('greet')}\n\n{t('menu')}"
+            request.session["whatsapp_menu_mode"] = True
+            return reply_text(msg)
+
+        if "help" in body_lower or is_help(body):
+            return reply_text(t("help_message"))
+
+        if is_goodbye(body):
+            return reply_text(t("goodbye"))
+
+        # Check if in menu mode and user typed a number
+        if request.session.get("whatsapp_menu_mode", False) and re.match(
+            r"^[1-8]$", body_lower
+        ):
+            menu_choice = int(body_lower)
+            request.session["whatsapp_menu_mode"] = False
+
+            if menu_choice == 1:  # Book a slot
+                spots = ParkingSpot.objects.filter(is_occupied=False)
+                if not spots.exists():
+                    return reply_text(t("no_slots"))
+
+                slot_a = spots.filter(spot_number="A").first()
+                slot_b = spots.filter(spot_number="B").first()
+
+                msg = f"{t('available_intro')} 🚗:\n"
+                if slot_a:
+                    msg += f"• {slot_a.spot_number} (#{slot_a.id})\n"
+                if slot_b:
+                    msg += f"• {slot_b.spot_number} (#{slot_b.id})\n"
+                msg += f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
+
+                return reply_text(msg)
+
+            elif menu_choice == 2:  # Check current booking
+                user = get_user()
+                booking = (
+                    Booking.objects.filter(user=user, status="active")
+                    .order_by("-start_time")
+                    .first()
+                )
+
+                if not booking:
+                    return reply_text(t("no_booking"))
+
+                remaining_seconds = max(
+                    0, int((booking.end_time - timezone.now()).total_seconds())
+                )
+                minutes = remaining_seconds // 60
+                seconds = remaining_seconds % 60
+
+                return reply_text(
+                    f"📋 Current Booking:\n\n"
+                    f"Slot: {booking.parking_spot.spot_number}\n"
+                    f"Time Remaining: {minutes}m {seconds}s\n"
+                    f"Status: {booking.status}"
+                )
+
+            elif menu_choice == 3:  # View booking history
+                user = get_user()
+                bookings = Booking.objects.filter(user=user).order_by("-start_time")[:3]
+
+                if not bookings:
+                    return reply_text(t("no_bookings"))
+
+                msg = "📋 Your Recent Bookings:\n\n"
+                for i, b in enumerate(bookings, 1):
+                    start = (
+                        b.start_time.strftime("%Y-%m-%d %H:%M") if b.start_time else "-"
+                    )
+                    end = b.end_time.strftime("%Y-%m-%d %H:%M") if b.end_time else "-"
+                    msg += f"#{i} {b.parking_spot.spot_number} | {b.status}\n"
+                    msg += f"Start: {start}\nEnd: {end}\n\n"
+
+                return reply_text(msg.strip())
+
+            elif menu_choice == 4:  # Search by date
+                request.session["whatsapp_flow"] = "search_date"
+                return reply_text(
+                    "Please enter a date in YYYY-MM-DD format (e.g., 2025-01-15):"
+                )
+
+            elif menu_choice == 5:  # Report issue
+                request.session["whatsapp_flow"] = "report_issue"
+                return reply_text(
+                    "Please describe the issue or problem you're experiencing:"
+                )
+
+            elif menu_choice == 6:  # Help & Support
+                return reply_text(
+                    "🅿️ *Smart Parking Help*\n\n"
+                    "I can help you with:\n"
+                    "• Booking slots\n"
+                    "• Checking your booking\n"
+                    "• Viewing booking history\n"
+                    "• Checking your balance\n"
+                    "\nJust type 'menu' to see all options!"
+                )
+
+            elif menu_choice == 7:  # Check balance
+                user = get_user()
+                profile = UserProfile.objects.get(user=user)
+                return reply_text(t("balance_is", float(profile.balance)))
+
+            elif menu_choice == 8:  # Language selection
+                request.session["whatsapp_flow"] = "choose_language"
+                return reply_text(t("choose_lang"))
+
+        # Language selection handler
+        if request.session.get("whatsapp_flow") == "choose_language":
+            if body_lower in ("1", "2", "3"):
+                lang_map = {"1": "en", "2": "sn", "3": "nd"}
+                lang_name_map = {"1": "English", "2": "Shona", "3": "Ndebele"}
+
+                request.session["whatsapp_language"] = lang_map[body_lower]
+                request.session["whatsapp_flow"] = "idle"
+
+                return reply_text(t("lang_set", lang_name_map[body_lower]))
+            else:
+                return reply_text(t("choose_lang"))
+
+        # Date search handler
+        if request.session.get("whatsapp_flow") == "search_date":
+            date_match = re.match(r"^\d{4}-\d{2}-\d{2}$", body)
+            if date_match:
+                date_str = date_match.group()
+                user = get_user()
+                bookings = Booking.objects.filter(user=user).order_by("-start_time")
+                on_date = [
+                    b
+                    for b in bookings
+                    if (b.start_time and b.start_time.strftime("%Y-%m-%d") == date_str)
+                ]
+
+                if not on_date:
+                    return reply_text(f"No bookings found on {date_str}.")
+
+                msg = f"Bookings on {date_str}:\n\n"
+                for i, b in enumerate(on_date[:5], 1):
+                    start = (
+                        b.start_time.strftime("%Y-%m-%d %H:%M") if b.start_time else "-"
+                    )
+                    end = b.end_time.strftime("%Y-%m-%d %H:%M") if b.end_time else "-"
+                    msg += f"#{i} {b.parking_spot.spot_number} | {b.status}\n"
+                    msg += f"Start: {start}\nEnd: {end}\n\n"
+
+                request.session["whatsapp_flow"] = "idle"
+                return reply_text(msg.strip())
+            else:
+                return reply_text(t("invalid_date"))
+
+        # Report issue handler
+        if request.session.get("whatsapp_flow") == "report_issue":
+            if len(body) < 10:
+                return reply_text(t("report_too_short"))
+
+            # Store report (you can add logic to save to database if needed)
+            request.session["whatsapp_flow"] = "idle"
+            return reply_text(t("report_sent"))
+
+        # Slot availability check
+        if "slots" in body_lower or "available" in body_lower:
+            spots = ParkingSpot.objects.filter(is_occupied=False)
+            if not spots.exists():
+                return reply_text(t("no_slots"))
+
+            slot_a = spots.filter(spot_number="A").first()
+            slot_b = spots.filter(spot_number="B").first()
+
+            msg = f"{t('available_intro')} 🚗:\n"
+            if slot_a:
+                msg += f"• {slot_a.spot_number} (#{slot_a.id})\n"
+            if slot_b:
+                msg += f"• {slot_b.spot_number} (#{slot_b.id})\n"
+            msg += f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
+
+            return reply_text(msg)
+
+        # Book slot handler
+        if "book" in body_lower or "reserve" in body_lower:
+            slot_input = extract_slot(body) or (
+                body_lower.split()[-1].upper()
+                if body_lower.split()[-1] in ("a", "b")
+                else None
+            )
+
+            if not slot_input:
+                return reply_text(
+                    "❌ Please specify a slot (A or B)\n\n"
+                    "Example: *book A* or *book B*"
+                )
+
+            try:
+                # Find available spot
+                spot = ParkingSpot.objects.filter(
+                    is_occupied=False, spot_number=slot_input
+                ).first()
+
+                if not spot:
+                    return reply_text(t("slot_not_available", slot_input))
+
+                user = get_user()
+
+                # Check existing booking
+                existing = Booking.objects.filter(user=user, status="active").first()
+                if existing:
+                    return reply_text(
+                        f"⚠️ You already have an active booking for {existing.parking_spot.spot_number}. "
+                        f"Please complete or cancel it first."
+                    )
+
+                # Check balance
+                profile = UserProfile.objects.get(user=user)
+                if float(profile.balance) < 1.00:
+                    return reply_text("❌ Insufficient balance. Minimum $1 required.")
+
+                # Create booking
+                now = timezone.now()
+                booking = Booking.objects.create(
+                    user=user,
+                    parking_spot=spot,
+                    start_time=now,
+                    end_time=now + timedelta(hours=12),
+                    duration_minutes=0,
+                    vehicle_name="WhatsApp User",
+                    status="active",
+                    grace_period_started=now,
+                    timer_started=None,
+                )
+
+                # Trigger ESP32 LED
+                try:
+                    from parking_app.views import trigger_esp32_booking_led
+
+                    trigger_esp32_booking_led(spot.spot_number, "blue")
+                except:
+                    pass
+
+                return reply_text(t("booked", spot.spot_number))
+
+            except Exception as e:
+                return reply_text(f"❌ Booking failed: {str(e)}")
+
+        # Status check handler
+        if "status" in body_lower or is_current_booking(body):
+            user = get_user()
+            booking = (
+                Booking.objects.filter(user=user, status="active")
+                .order_by("-start_time")
+                .first()
+            )
+
+            if not booking:
+                return reply_text(t("no_booking"))
+
+            remaining_seconds = max(
+                0, int((booking.end_time - timezone.now()).total_seconds())
+            )
+            minutes = remaining_seconds // 60
+            seconds = remaining_seconds % 60
+
+            return reply_text(
+                f"📋 Current Booking:\n\n"
+                f"Slot: {booking.parking_spot.spot_number}\n"
+                f"Time Remaining: {minutes}m {seconds}s\n"
+                f"Status: {booking.status}"
+            )
+
+        # Balance check handler
+        if "balance" in body_lower:
+            user = get_user()
+            profile = UserProfile.objects.get(user=user)
+            return reply_text(t("balance_is", float(profile.balance)))
+
+        # Cancel booking handler
+        if is_cancel_intent(body):
+            user = get_user()
+            booking = (
+                Booking.objects.filter(user=user, status="active")
+                .order_by("-start_time")
+                .first()
+            )
+
+            if not booking:
+                return reply_text(t("no_booking"))
+
+            booking.status = "cancelled"
+            booking.save()
+
+            return reply_text(
+                f"{t('booking_cancelled')}\n\n"
+                f"Slot: {booking.parking_spot.spot_number}\n"
+                f"Refund: ${float(booking.total_cost or 0):.2f}"
+            )
+
+        # History check handler
+        if "history" in body_lower or "bookings" in body_lower:
+            user = get_user()
+            bookings = Booking.objects.filter(user=user).order_by("-start_time")[:3]
+
+            if not bookings:
+                return reply_text(t("no_bookings"))
+
+            msg = "📋 Your Recent Bookings:\n\n"
+            for i, b in enumerate(bookings, 1):
+                start = b.start_time.strftime("%Y-%m-%d %H:%M") if b.start_time else "-"
+                end = b.end_time.strftime("%Y-%m-%d %H:%M") if b.end_time else "-"
+                msg += f"#{i} {b.parking_spot.spot_number} | {b.status}\n"
+                msg += f"Start: {start}\nEnd: {end}\n\n"
+
+            return reply_text(msg.strip())
+
+        # Default fallback
+        return reply_text(t("didnt_understand"))
+
     except Exception as e:
+        import traceback
+
+        traceback.print_exc()
         return HttpResponse(f"Error: {e}", content_type="text/plain", status=500)
