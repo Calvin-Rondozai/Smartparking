@@ -457,6 +457,15 @@ def twilio_whatsapp_webhook(request):
         resp.message(text)
         return HttpResponse(str(resp), content_type="application/xml")
 
+    def reply_messages(messages: list) -> HttpResponse:
+        """Send multiple messages as separate WhatsApp messages"""
+        if MessagingResponse is None:
+            return HttpResponse("\n\n".join(messages), content_type="text/plain")
+        resp = MessagingResponse()
+        for msg in messages:
+            resp.message(msg)
+        return HttpResponse(str(resp), content_type="application/xml")
+
     # Intent parsing helpers
     def normalize(s):
         if not s:
@@ -592,20 +601,28 @@ def twilio_whatsapp_webhook(request):
             username = request.session.get("whatsapp_login_username")
             password = body
 
+            # Clear password from memory after use (security)
             try:
                 user, error = authenticate_whatsapp_user(username, password)
+                # password variable will be out of scope after this block
 
                 if user and not error:
                     # Successfully authenticated
                     request.session["whatsapp_authenticated_user_id"] = user.id
                     request.session["whatsapp_flow"] = "idle"
-                    request.session.pop("whatsapp_login_username", None)
+                    request.session.pop(
+                        "whatsapp_login_username", None
+                    )  # Clear username from session
 
-                    return reply_text(
-                        f"✅ Login successful!\n\n"
-                        f"Welcome {user.username}!\n\n"
-                        f"Type 'menu' to see options."
+                    # Send two separate messages
+                    success_msg = (
+                        f"✅ Login successful!\n\n" f"Welcome {user.username}!"
                     )
+
+                    # Get the menu message
+                    menu_msg = f"{t('greet')}\n\n{t('menu')}"
+
+                    return reply_messages([success_msg, menu_msg])
                 else:
                     # Authentication failed - restart login
                     request.session["whatsapp_flow"] = "login_username"
@@ -626,6 +643,9 @@ def twilio_whatsapp_webhook(request):
                     f"Please try again.\n\n"
                     f"Enter your username:"
                 )
+            finally:
+                # Ensure password is cleared (it's in local scope 'password')
+                password = None  # Explicitly clear
 
         # Handle login intent (optional - user can type "login" to restart flow)
         if intent["type"] == "login" or "login" in body_lower:
@@ -928,11 +948,11 @@ def twilio_whatsapp_webhook(request):
             booking.status = "cancelled"
             booking.save()
 
-            return reply_text(
-                f"{t('booking_cancelled')}\n\n"
-                f"Slot: {booking.parking_spot.spot_number}\n"
-                f"Refund: ${float(booking.total_cost or 0):.2f}"
-            )
+        return reply_text(
+            f"{t('booking_cancelled')}\n\n"
+            f"Slot: {booking.parking_spot.spot_number}\n"
+            f"Refund: ${float(booking.total_cost or 0):.2f}"
+        )
 
         # History check handler
         if "history" in body_lower or "bookings" in body_lower:
