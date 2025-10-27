@@ -247,6 +247,10 @@ def parse_whatsapp_intent(raw):
     if re.search(r"(slots|available)", s):
         return {"type": "slots"}
 
+    # Login
+    if re.search(r"(login|sign in|sign in)", s):
+        return {"type": "login"}
+
     return {"type": "unknown"}
 
 
@@ -277,6 +281,48 @@ def get_whatsapp_user(from_number):
             balance=100.00,
         )
         return user
+
+
+def authenticate_whatsapp_user(username, password):
+    """Authenticate user for WhatsApp"""
+    from django.contrib.auth import authenticate
+    from django.contrib.auth.models import User
+    from parking_app.models import UserProfile
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Try to find user by username (case-insensitive)
+    try:
+        user_obj = User.objects.get(username__iexact=username.strip())
+        logger.info(f"Found user: {user_obj.username}")
+
+        # Authenticate with the actual username from database
+        user = authenticate(username=user_obj.username, password=password)
+
+        if user is None:
+            logger.warning("Authentication failed - invalid password")
+            return None, "Invalid username or password"
+
+        if not user.is_active:
+            logger.warning("User is not active")
+            return None, "Account is deactivated"
+
+        # Check if profile exists
+        try:
+            profile = UserProfile.objects.get(user=user)
+            logger.info(f"Authentication successful for: {user.username}")
+            return user, None
+        except UserProfile.DoesNotExist:
+            logger.warning("User profile not found")
+            return None, "User profile not found"
+
+    except User.DoesNotExist:
+        logger.warning(f"User not found: {username}")
+        return None, "Invalid username or password"
+    except Exception as e:
+        logger.error(f"Authentication error: {str(e)}")
+        return None, f"Authentication error: {str(e)}"
 
 
 @csrf_exempt
@@ -469,14 +515,21 @@ def twilio_whatsapp_webhook(request):
         from_number = request.data.get("From", "").replace("whatsapp:", "")
         body_lower = body.lower().strip()
 
-        # Helper function to get user
+        # Helper function to get user - check if authenticated first
         def get_user():
-            return get_whatsapp_user(from_number)
-
-        if not body:
-            return reply_text(
-                "Hi👋! I'm Calvin, your Smart Parking assistant!\n\nReply with 'menu' to see options!"
+            # Check if user is authenticated
+            authenticated_user_id = request.session.get(
+                "whatsapp_authenticated_user_id"
             )
+            if authenticated_user_id:
+                try:
+                    from django.contrib.auth.models import User
+
+                    return User.objects.get(id=authenticated_user_id)
+                except User.DoesNotExist:
+                    pass
+            # Fall back to guest user
+            return get_whatsapp_user(from_number)
 
         # Initialize session
         if "whatsapp_conversation" not in request.session:
@@ -485,13 +538,38 @@ def twilio_whatsapp_webhook(request):
             request.session["whatsapp_language"] = "en"
             request.session["whatsapp_menu_mode"] = False
 
+        if not body:
+            is_auth = request.session.get("whatsapp_authenticated_user_id") is not None
+            if not is_auth:
+                # Auto-start login flow
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 *Welcome to Smart Parking!*\n\n"
+                    "Please enter your username to login:"
+                )
+            return reply_text(
+                "Hi👋! I'm Calvin, your Smart Parking assistant!\n\nReply with 'menu' to see options!"
+            )
+
         # Parse intent using global function
         intent = parse_whatsapp_intent(body)
         flow = request.session.get("whatsapp_flow", "idle")
         menu_mode = request.session.get("whatsapp_menu_mode", False)
 
+        # Check if user is authenticated
+        is_authenticated = (
+            request.session.get("whatsapp_authenticated_user_id") is not None
+        )
+
         # Handle greeting and menu
         if intent["type"] == "greet" or body_lower in ("hi", "hello", "menu", "hey"):
+            if not is_authenticated:
+                # Auto-start login flow
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 *Welcome to Smart Parking!*\n\n"
+                    "Please enter your username to login:"
+                )
             msg = f"{t('greet')}\n\n{t('menu')}"
             request.session["whatsapp_menu_mode"] = True
             return reply_text(msg)
@@ -501,6 +579,75 @@ def twilio_whatsapp_webhook(request):
 
         if is_goodbye(body):
             return reply_text(t("goodbye"))
+
+        # Handle login flow
+        if request.session.get("whatsapp_flow") == "login_username":
+            # User provided username, now ask for password
+            request.session["whatsapp_login_username"] = body
+            request.session["whatsapp_flow"] = "login_password"
+            return reply_text("🔐 Enter your password:")
+
+        if request.session.get("whatsapp_flow") == "login_password":
+            # User provided password, authenticate
+            username = request.session.get("whatsapp_login_username")
+            password = body
+
+            try:
+                user, error = authenticate_whatsapp_user(username, password)
+
+                if user and not error:
+                    # Successfully authenticated
+                    request.session["whatsapp_authenticated_user_id"] = user.id
+                    request.session["whatsapp_flow"] = "idle"
+                    request.session.pop("whatsapp_login_username", None)
+
+                    return reply_text(
+                        f"✅ Login successful!\n\n"
+                        f"Welcome {user.username}!\n\n"
+                        f"Type 'menu' to see options."
+                    )
+                else:
+                    # Authentication failed - restart login
+                    request.session["whatsapp_flow"] = "login_username"
+                    request.session.pop("whatsapp_login_username", None)
+                    return reply_text(
+                        f"❌ Login failed: {error or 'Invalid credentials'}\n\n"
+                        f"Please try again.\n\n"
+                        f"Enter your username:"
+                    )
+            except Exception as e:
+                import traceback
+
+                traceback.print_exc()
+                request.session["whatsapp_flow"] = "login_username"
+                request.session.pop("whatsapp_login_username", None)
+                return reply_text(
+                    f"❌ Login error: {str(e)}\n\n"
+                    f"Please try again.\n\n"
+                    f"Enter your username:"
+                )
+
+        # Handle login intent (optional - user can type "login" to restart flow)
+        if intent["type"] == "login" or "login" in body_lower:
+            request.session["whatsapp_flow"] = "login_username"
+            request.session.pop(
+                "whatsapp_login_username", None
+            )  # Reset any previous attempt
+            return reply_text("🔐 Enter your username:")
+
+        # Allow login flows even when not authenticated
+        is_in_login_flow = request.session.get("whatsapp_flow") in (
+            "login_username",
+            "login_password",
+        )
+
+        # Block all other commands if not authenticated (except login flow)
+        if not is_authenticated and not is_in_login_flow:
+            # Auto-start login flow
+            request.session["whatsapp_flow"] = "login_username"
+            return reply_text(
+                "🔐 *Login required*\n\n" "Please enter your username to login:"
+            )
 
         # Check if in menu mode and user typed a number
         if request.session.get("whatsapp_menu_mode", False) and re.match(
