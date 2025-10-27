@@ -248,8 +248,17 @@ def parse_whatsapp_intent(raw):
         return {"type": "slots"}
 
     # Login
-    if re.search(r"(login|sign in|sign in)", s):
+    if re.search(r"(login|sign in|auth)", s):
         return {"type": "login"}
+
+    # Book intent
+    if re.search(r"(book|reserve|hold|save)\b", s) and re.search(
+        r"(slot|\b[a|b]\b|#|\d)", s
+    ):
+        slot = (
+            "A" if re.search(r"\ba\b", s) else "B" if re.search(r"\bb\b", s) else None
+        )
+        return {"type": "book", "slot": slot}
 
     return {"type": "unknown"}
 
@@ -344,7 +353,7 @@ def twilio_whatsapp_webhook(request):
     # Translation support for multi-language (English, Shona, Ndebele)
     translations = {
         "en": {
-            "greet": "Hi👋! I'm Calvin, your Smart Parking assistant!",
+            "greet": "Greetings👋! I'm Calvin, your Smart Parking assistant!",
             "menu": "What would you like to do?\n\n1️⃣ Book a slot\n2️⃣ Check current booking\n3️⃣ View booking history\n4️⃣ Search bookings by date\n5️⃣ Report an issue\n6️⃣ Help & Support\n7️⃣ Check balance\n8️⃣ Language\n\nJust type the number (1-8) to select an option!\n\n💡 Tip: Type 'menu' anytime to return here!",
             "booked": lambda slot: f'✅ Successfully booked Slot {slot}!\n\n📱 Navigate to the "Current Bookings" page to view your booking details.',
             "expiry_warn": "⏰ Time expired before you entered the slot.",
@@ -520,8 +529,8 @@ def twilio_whatsapp_webhook(request):
         )
 
     try:
-        body = (request.data.get("Body") or "").strip()
-        from_number = request.data.get("From", "").replace("whatsapp:", "")
+        body = (request.POST.get("Body") or "").strip()
+        from_number = request.POST.get("From", "").replace("whatsapp:", "")
         body_lower = body.lower().strip()
 
         # Helper function to get user - check if authenticated first
@@ -548,16 +557,9 @@ def twilio_whatsapp_webhook(request):
             request.session["whatsapp_menu_mode"] = False
 
         if not body:
-            is_auth = request.session.get("whatsapp_authenticated_user_id") is not None
-            if not is_auth:
-                # Auto-start login flow
-                request.session["whatsapp_flow"] = "login_username"
-                return reply_text(
-                    "🔐 *Welcome to Smart Parking!*\n\n"
-                    "Please enter your username to login:"
-                )
+            # Just show menu - don't force login on empty message
             return reply_text(
-                "Hi👋! I'm Calvin, your Smart Parking assistant!\n\nReply with 'menu' to see options!"
+                "Greetings👋! I'm Calvin, your Smart Parking assistant!\n\nReply with 'menu' to see options!"
             )
 
         # Parse intent using global function
@@ -572,15 +574,10 @@ def twilio_whatsapp_webhook(request):
 
         # Handle greeting and menu
         if intent["type"] == "greet" or body_lower in ("hi", "hello", "menu", "hey"):
-            if not is_authenticated:
-                # Auto-start login flow
-                request.session["whatsapp_flow"] = "login_username"
-                return reply_text(
-                    "🔐 *Welcome to Smart Parking!*\n\n"
-                    "Please enter your username to login:"
-                )
+            # Show menu regardless of authentication status
             msg = f"{t('greet')}\n\n{t('menu')}"
             request.session["whatsapp_menu_mode"] = True
+            request.session["whatsapp_flow"] = "idle"
             return reply_text(msg)
 
         if "help" in body_lower or is_help(body):
@@ -613,6 +610,98 @@ def twilio_whatsapp_webhook(request):
                     request.session.pop(
                         "whatsapp_login_username", None
                     )  # Clear username from session
+
+                    # Set active session
+                    request.session["whatsapp_active_session"] = True
+
+                    # Check if there's a pending action
+                    pending_action = request.session.get("whatsapp_pending_action")
+                    if pending_action:
+                        # Send success message only
+                        success_msg = (
+                            f"✅ Login successful!\n\n" f"Welcome {user.username}!"
+                        )
+
+                        # Clear pending action flag
+                        request.session.pop("whatsapp_pending_action", None)
+
+                        # Process the pending action immediately
+                        if pending_action == 1:  # Book a slot
+                            spots = ParkingSpot.objects.filter(is_occupied=False)
+                            if not spots.exists():
+                                return reply_messages([success_msg, t("no_slots")])
+                            slot_a = spots.filter(spot_number="A").first()
+                            slot_b = spots.filter(spot_number="B").first()
+                            msg = f"{t('available_intro')} 🚗:\n"
+                            if slot_a:
+                                msg += f"• {slot_a.spot_number} (#{slot_a.id})\n"
+                            if slot_b:
+                                msg += f"• {slot_b.spot_number} (#{slot_b.id})\n"
+                            msg += (
+                                f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
+                            )
+                            return reply_messages([success_msg, msg])
+                        elif pending_action == 2:  # Check booking
+                            booking = (
+                                Booking.objects.filter(user=user, status="active")
+                                .order_by("-start_time")
+                                .first()
+                            )
+                            if not booking:
+                                return reply_messages([success_msg, t("no_booking")])
+                            remaining_seconds = max(
+                                0,
+                                int(
+                                    (booking.end_time - timezone.now()).total_seconds()
+                                ),
+                            )
+                            minutes = remaining_seconds // 60
+                            seconds = remaining_seconds % 60
+                            return reply_messages(
+                                [
+                                    success_msg,
+                                    f"📋 Current Booking:\n\n"
+                                    f"Slot: {booking.parking_spot.spot_number}\n"
+                                    f"Time Remaining: {minutes}m {seconds}s\n"
+                                    f"Status: {booking.status}",
+                                ]
+                            )
+                        elif pending_action == 3:  # History
+                            bookings = Booking.objects.filter(user=user).order_by(
+                                "-start_time"
+                            )[:3]
+                            if not bookings:
+                                return reply_messages([success_msg, t("no_bookings")])
+                            msg = "📋 Your Recent Bookings:\n\n"
+                            for i, b in enumerate(bookings, 1):
+                                start = (
+                                    b.start_time.strftime("%Y-%m-%d %H:%M")
+                                    if b.start_time
+                                    else "-"
+                                )
+                                end = (
+                                    b.end_time.strftime("%Y-%m-%d %H:%M")
+                                    if b.end_time
+                                    else "-"
+                                )
+                                msg += (
+                                    f"#{i} {b.parking_spot.spot_number} | {b.status}\n"
+                                )
+                                msg += f"Start: {start}\nEnd: {end}\n\n"
+                            return reply_messages([success_msg, msg.strip()])
+                        elif pending_action == 4:  # Search
+                            request.session["whatsapp_flow"] = "search_date"
+                            return reply_messages(
+                                [
+                                    success_msg,
+                                    "Please enter a date in YYYY-MM-DD format (e.g., 2025-01-15):",
+                                ]
+                            )
+                        elif pending_action == 7:  # Balance
+                            profile = UserProfile.objects.get(user=user)
+                            return reply_messages(
+                                [success_msg, t("balance_is", float(profile.balance))]
+                            )
 
                     # Send two separate messages
                     success_msg = (
@@ -661,14 +750,6 @@ def twilio_whatsapp_webhook(request):
             "login_password",
         )
 
-        # Block all other commands if not authenticated (except login flow)
-        if not is_authenticated and not is_in_login_flow:
-            # Auto-start login flow
-            request.session["whatsapp_flow"] = "login_username"
-            return reply_text(
-                "🔐 *Login required*\n\n" "Please enter your username to login:"
-            )
-
         # Check if in menu mode and user typed a number
         if request.session.get("whatsapp_menu_mode", False) and re.match(
             r"^[1-8]$", body_lower
@@ -677,6 +758,15 @@ def twilio_whatsapp_webhook(request):
             request.session["whatsapp_menu_mode"] = False
 
             if menu_choice == 1:  # Book a slot
+                # Check authentication
+                if not is_authenticated:
+                    request.session["whatsapp_pending_action"] = 1
+                    request.session["whatsapp_flow"] = "login_username"
+                    return reply_text(
+                        "🔐 *Authentication required*\n\n"
+                        "Please enter your username to continue:"
+                    )
+
                 spots = ParkingSpot.objects.filter(is_occupied=False)
                 if not spots.exists():
                     return reply_text(t("no_slots"))
@@ -691,81 +781,79 @@ def twilio_whatsapp_webhook(request):
                     msg += f"• {slot_b.spot_number} (#{slot_b.id})\n"
                 msg += f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
 
-                return reply_text(msg)
+            return reply_text(msg)
 
-            elif menu_choice == 2:  # Check current booking
-                user = get_user()
-                booking = (
-                    Booking.objects.filter(user=user, status="active")
-                    .order_by("-start_time")
-                    .first()
-                )
+        elif menu_choice == 2:  # Check current booking
+            user = get_user()
+            booking = (
+                Booking.objects.filter(user=user, status="active")
+                .order_by("-start_time")
+                .first()
+            )
 
-                if not booking:
-                    return reply_text(t("no_booking"))
+            if not booking:
+                return reply_text(t("no_booking"))
 
-                remaining_seconds = max(
-                    0, int((booking.end_time - timezone.now()).total_seconds())
-                )
-                minutes = remaining_seconds // 60
-                seconds = remaining_seconds % 60
+            remaining_seconds = max(
+                0, int((booking.end_time - timezone.now()).total_seconds())
+            )
+            minutes = remaining_seconds // 60
+            seconds = remaining_seconds % 60
 
-                return reply_text(
-                    f"📋 Current Booking:\n\n"
-                    f"Slot: {booking.parking_spot.spot_number}\n"
-                    f"Time Remaining: {minutes}m {seconds}s\n"
-                    f"Status: {booking.status}"
-                )
+            return reply_text(
+                f"📋 Current Booking:\n\n"
+                f"Slot: {booking.parking_spot.spot_number}\n"
+                f"Time Remaining: {minutes}m {seconds}s\n"
+                f"Status: {booking.status}"
+            )
 
-            elif menu_choice == 3:  # View booking history
-                user = get_user()
-                bookings = Booking.objects.filter(user=user).order_by("-start_time")[:3]
+        elif menu_choice == 3:  # View booking history
+            user = get_user()
+            bookings = Booking.objects.filter(user=user).order_by("-start_time")[:3]
 
-                if not bookings:
-                    return reply_text(t("no_bookings"))
+            if not bookings:
+                return reply_text(t("no_bookings"))
 
-                msg = "📋 Your Recent Bookings:\n\n"
-                for i, b in enumerate(bookings, 1):
-                    start = (
-                        b.start_time.strftime("%Y-%m-%d %H:%M") if b.start_time else "-"
-                    )
-                    end = b.end_time.strftime("%Y-%m-%d %H:%M") if b.end_time else "-"
-                    msg += f"#{i} {b.parking_spot.spot_number} | {b.status}\n"
-                    msg += f"Start: {start}\nEnd: {end}\n\n"
+            msg = "📋 Your Recent Bookings:\n\n"
+            for i, b in enumerate(bookings, 1):
+                start = b.start_time.strftime("%Y-%m-%d %H:%M") if b.start_time else "-"
+                end = b.end_time.strftime("%Y-%m-%d %H:%M") if b.end_time else "-"
+                msg += f"#{i} {b.parking_spot.spot_number} | {b.status}\n"
+                msg += f"Start: {start}\nEnd: {end}\n\n"
 
-                return reply_text(msg.strip())
+            return reply_text(msg.strip())
 
-            elif menu_choice == 4:  # Search by date
-                request.session["whatsapp_flow"] = "search_date"
-                return reply_text(
-                    "Please enter a date in YYYY-MM-DD format (e.g., 2025-01-15):"
-                )
+        elif menu_choice == 4:  # Search by date
+            request.session["whatsapp_flow"] = "search_date"
+            return reply_text(
+                "Please enter a date in YYYY-MM-DD format (e.g., 2025-01-15):"
+            )
 
-            elif menu_choice == 5:  # Report issue
-                request.session["whatsapp_flow"] = "report_issue"
-                return reply_text(
-                    "Please describe the issue or problem you're experiencing:"
-                )
+        elif menu_choice == 5:  # Report issue
+            request.session["whatsapp_flow"] = "report_issue"
+            return reply_text(
+                "Please describe the issue or problem you're experiencing:"
+            )
 
-            elif menu_choice == 6:  # Help & Support
-                return reply_text(
-                    "🅿️ *Smart Parking Help*\n\n"
-                    "I can help you with:\n"
-                    "• Booking slots\n"
-                    "• Checking your booking\n"
-                    "• Viewing booking history\n"
-                    "• Checking your balance\n"
-                    "\nJust type 'menu' to see all options!"
-                )
+        elif menu_choice == 6:  # Help & Support
+            return reply_text(
+                "🅿️ *Smart Parking Help*\n\n"
+                "I can help you with:\n"
+                "• Booking slots\n"
+                "• Checking your booking\n"
+                "• Viewing booking history\n"
+                "• Checking your balance\n"
+                "\nJust type 'menu' to see all options!"
+            )
 
-            elif menu_choice == 7:  # Check balance
-                user = get_user()
-                profile = UserProfile.objects.get(user=user)
-                return reply_text(t("balance_is", float(profile.balance)))
+        elif menu_choice == 7:  # Check balance
+            user = get_user()
+            profile = UserProfile.objects.get(user=user)
+            return reply_text(t("balance_is", float(profile.balance)))
 
-            elif menu_choice == 8:  # Language selection
-                request.session["whatsapp_flow"] = "choose_language"
-                return reply_text(t("choose_lang"))
+        elif menu_choice == 8:  # Language selection
+            request.session["whatsapp_flow"] = "choose_language"
+            return reply_text(t("choose_lang"))
 
         # Language selection handler
         if request.session.get("whatsapp_flow") == "choose_language":
@@ -897,6 +985,10 @@ def twilio_whatsapp_webhook(request):
                 except:
                     pass
 
+                # End session after booking
+                request.session["whatsapp_active_session"] = False
+                request.session.pop("whatsapp_authenticated_user_id", None)
+
                 return reply_text(t("booked", spot.spot_number))
 
             except Exception as e:
@@ -920,12 +1012,12 @@ def twilio_whatsapp_webhook(request):
             minutes = remaining_seconds // 60
             seconds = remaining_seconds % 60
 
-            return reply_text(
-                f"📋 Current Booking:\n\n"
-                f"Slot: {booking.parking_spot.spot_number}\n"
-                f"Time Remaining: {minutes}m {seconds}s\n"
-                f"Status: {booking.status}"
-            )
+        return reply_text(
+            f"📋 Current Booking:\n\n"
+            f"Slot: {booking.parking_spot.spot_number}\n"
+            f"Time Remaining: {minutes}m {seconds}s\n"
+            f"Status: {booking.status}"
+        )
 
         # Balance check handler
         if "balance" in body_lower:
@@ -948,11 +1040,7 @@ def twilio_whatsapp_webhook(request):
             booking.status = "cancelled"
             booking.save()
 
-        return reply_text(
-            f"{t('booking_cancelled')}\n\n"
-            f"Slot: {booking.parking_spot.spot_number}\n"
-            f"Refund: ${float(booking.total_cost or 0):.2f}"
-        )
+            return reply_text(t("booking_cancelled"))
 
         # History check handler
         if "history" in body_lower or "bookings" in body_lower:
