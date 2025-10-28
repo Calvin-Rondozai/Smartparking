@@ -1,4 +1,4 @@
-from rest_framework.decorators import api_view, permission_classes
+gitfrom rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
@@ -93,9 +93,13 @@ def booking_history(request):
 def available_slots(request):
     """
     Return available slots in real time using existing ParkingSpot data.
+    Only show slots A and B (your actual parking slots).
     """
     try:
-        spots = ParkingSpot.objects.filter(is_occupied=False)
+        # Only show slots A and B that are not occupied
+        spots = ParkingSpot.objects.filter(
+            is_occupied=False, spot_number__in=["A", "B"]
+        )
         result = [
             {
                 "id": s.id,
@@ -335,13 +339,16 @@ def authenticate_whatsapp_user(username, password):
 
 
 @csrf_exempt
-@api_view(["POST"])
+@api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 def twilio_whatsapp_webhook(request):
     """
-    Twilio WhatsApp webhook endpoint - matches mobile chatbot logic exactly.
+    Twilio WhatsApp webhook endpoint - uses the same logic as mobile app chatbot.
+    Calls existing chatbot APIs for consistency.
     Configure Twilio WhatsApp webhook URL to: /api/chatbot/twilio/webhook/
     """
+    import logging
+    import traceback
     from django.conf import settings
     from parking_app.models import UserProfile, ParkingSpot
     from django.contrib.auth.models import User
@@ -349,6 +356,38 @@ def twilio_whatsapp_webhook(request):
     from django.utils import timezone
     from parking_app.serializers import BookingSerializer
     import re
+
+    logger = logging.getLogger(__name__)
+
+    # Helper function to call existing chatbot APIs (same as mobile app)
+    def call_chatbot_api(endpoint, method="GET", data=None):
+        """Call the exact same API endpoints the mobile app uses"""
+        from django.test import RequestFactory
+        from django.contrib.auth.models import AnonymousUser
+
+        factory = RequestFactory()
+        if method == "GET":
+            req = factory.get(f"/api/chatbot/{endpoint}/")
+        else:
+            req = factory.post(f"/api/chatbot/{endpoint}/", data or {})
+
+        # Set user for authenticated endpoints
+        user = get_user()
+        req.user = user if user else AnonymousUser()
+
+        # Import and call the actual view functions
+        if endpoint == "available-slots":
+            return available_slots(req)
+        elif endpoint == "current-booking":
+            return current_booking(req)
+        elif endpoint == "booking-history":
+            return booking_history(req)
+        elif endpoint == "reserve":
+            return reserve_slot(req)
+        elif endpoint == "help":
+            return help_info(req)
+
+        return None
 
     # Translation support for multi-language (English, Shona, Ndebele)
     translations = {
@@ -460,19 +499,17 @@ def twilio_whatsapp_webhook(request):
         return val or key
 
     def reply_text(text: str) -> HttpResponse:
-        if MessagingResponse is None:
-            return HttpResponse(text, content_type="text/plain")
         resp = MessagingResponse()
         resp.message(text)
+        logger.info(f"📤 Replying with: {text[:100]}")
         return HttpResponse(str(resp), content_type="application/xml")
 
     def reply_messages(messages: list) -> HttpResponse:
         """Send multiple messages as separate WhatsApp messages"""
-        if MessagingResponse is None:
-            return HttpResponse("\n\n".join(messages), content_type="text/plain")
         resp = MessagingResponse()
         for msg in messages:
             resp.message(msg)
+            logger.info(f"📤 Replying with: {msg[:100]}")
         return HttpResponse(str(resp), content_type="application/xml")
 
     # Intent parsing helpers
@@ -529,9 +566,23 @@ def twilio_whatsapp_webhook(request):
         )
 
     try:
+        # Log all incoming data for debugging
+        logger.info(f"🔍 Webhook called - Method: {request.method}")
+        logger.info(f"🔍 POST data: {dict(request.POST)}")
+
+        # Simple test response for GET requests
+        if request.method == "GET":
+            return HttpResponse(
+                "WhatsApp webhook is working! Send POST requests from Twilio."
+            )
+
         body = (request.POST.get("Body") or "").strip()
         from_number = request.POST.get("From", "").replace("whatsapp:", "")
         body_lower = body.lower().strip()
+
+        # Log incoming message for debugging
+        logger.info(f"📱 WhatsApp message from {from_number}: '{body}'")
+        logger.info(f"📱 Body length: {len(body)}, From: {from_number}")
 
         # Helper function to get user - check if authenticated first
         def get_user():
@@ -549,15 +600,16 @@ def twilio_whatsapp_webhook(request):
             # Fall back to guest user
             return get_whatsapp_user(from_number)
 
-        # Initialize session
+        # Initialize session if needed
         if "whatsapp_conversation" not in request.session:
             request.session["whatsapp_conversation"] = True
-            request.session["whatsapp_flow"] = "idle"
             request.session["whatsapp_language"] = "en"
             request.session["whatsapp_menu_mode"] = False
+            request.session["whatsapp_flow"] = "idle"
 
         if not body:
-            # Just show menu - don't force login on empty message
+            # Just show menu
+            logger.info("📱 Empty body received - showing greeting")
             return reply_text(
                 "Greetings👋! I'm Calvin, your Smart Parking assistant!\n\nReply with 'menu' to see options!"
             )
@@ -567,17 +619,16 @@ def twilio_whatsapp_webhook(request):
         flow = request.session.get("whatsapp_flow", "idle")
         menu_mode = request.session.get("whatsapp_menu_mode", False)
 
-        # Check if user is authenticated
-        is_authenticated = (
-            request.session.get("whatsapp_authenticated_user_id") is not None
-        )
-
         # Handle greeting and menu
         if intent["type"] == "greet" or body_lower in ("hi", "hello", "menu", "hey"):
-            # Show menu regardless of authentication status
+            # Show menu
+            logger.info(
+                f"📱 Greeting detected - intent: {intent['type']}, body: '{body_lower}'"
+            )
             msg = f"{t('greet')}\n\n{t('menu')}"
             request.session["whatsapp_menu_mode"] = True
             request.session["whatsapp_flow"] = "idle"
+            logger.info(f"📱 Sending greeting menu: {msg[:100]}")
             return reply_text(msg)
 
         if "help" in body_lower or is_help(body):
@@ -627,7 +678,9 @@ def twilio_whatsapp_webhook(request):
 
                         # Process the pending action immediately
                         if pending_action == 1:  # Book a slot
-                            spots = ParkingSpot.objects.filter(is_occupied=False)
+                            spots = ParkingSpot.objects.filter(
+                                is_occupied=False, spot_number__in=["A", "B"]
+                            )
                             if not spots.exists():
                                 return reply_messages([success_msg, t("no_slots")])
                             slot_a = spots.filter(spot_number="A").first()
@@ -751,109 +804,168 @@ def twilio_whatsapp_webhook(request):
         )
 
         # Check if in menu mode and user typed a number
+        logger.info(
+            f"📱 Checking menu mode: {request.session.get('whatsapp_menu_mode', False)}"
+        )
+        logger.info(
+            f"📱 Body matches pattern: {bool(re.match(r'^[1-8]$', body_lower))}"
+        )
+
         if request.session.get("whatsapp_menu_mode", False) and re.match(
             r"^[1-8]$", body_lower
         ):
             menu_choice = int(body_lower)
+            logger.info(f"📱 Menu choice: {menu_choice}")
             request.session["whatsapp_menu_mode"] = False
 
             if menu_choice == 1:  # Book a slot
-                # Check authentication
-                if not is_authenticated:
-                    request.session["whatsapp_pending_action"] = 1
-                    request.session["whatsapp_flow"] = "login_username"
-                    return reply_text(
-                        "🔐 *Authentication required*\n\n"
-                        "Please enter your username to continue:"
-                    )
+                logger.info("📱 Processing option 1 - Book a slot")
+                # Use the exact same API as mobile app
+                try:
+                    api_response = call_chatbot_api("available-slots")
+                    if api_response.status_code == 200:
+                        slots_data = api_response.data.get("available_spots", [])
 
-                spots = ParkingSpot.objects.filter(is_occupied=False)
-                if not spots.exists():
-                    return reply_text(t("no_slots"))
+                        if not slots_data:
+                            return reply_text("🚫 No slots available right now.")
 
-                slot_a = spots.filter(spot_number="A").first()
-                slot_b = spots.filter(spot_number="B").first()
+                        msg = "🅿️ Available slots:\n"
+                        for slot in slots_data:
+                            msg += f"• {slot['name']} (#{slot['id']})\n"
+                        msg += "\nType 'book A' or 'book B' to reserve"
 
-                msg = f"{t('available_intro')} 🚗:\n"
-                if slot_a:
-                    msg += f"• {slot_a.spot_number} (#{slot_a.id})\n"
-                if slot_b:
-                    msg += f"• {slot_b.spot_number} (#{slot_b.id})\n"
-                msg += f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
+                        return reply_text(msg)
+                    else:
+                        return reply_text("🚫 No slots available right now.")
+                except Exception as e:
+                    logger.error(f"Error getting available slots: {e}")
+                    return reply_text("🚫 No slots available right now.")
 
-            return reply_text(msg)
+            elif menu_choice == 2:  # Check current booking
+                # Use the exact same API as mobile app
+                try:
+                    api_response = call_chatbot_api("current-booking")
+                    if api_response.status_code == 200:
+                        data = api_response.data
+                        if data.get("hasBooking"):
+                            slot = data.get("slot", "Unknown")
+                            remaining_time = data.get("remaining_time", "0m 0s")
+                            status = data.get("status", "active")
 
-        elif menu_choice == 2:  # Check current booking
-            user = get_user()
-            booking = (
-                Booking.objects.filter(user=user, status="active")
-                .order_by("-start_time")
-                .first()
-            )
+                            return reply_text(
+                                f"📋 Current Booking:\n\n"
+                                f"Slot: {slot}\n"
+                                f"Time Remaining: {remaining_time}\n"
+                                f"Status: {status}"
+                            )
+                        else:
+                            return reply_text(t("no_booking"))
+                    else:
+                        return reply_text(t("no_booking"))
+                except Exception as e:
+                    logger.error(f"Error getting current booking: {e}")
+                    return reply_text(t("no_booking"))
 
-            if not booking:
-                return reply_text(t("no_booking"))
+            elif menu_choice == 3:  # View booking history
+                logger.info("📱 Processing option 3 - View booking history")
+                # Use the exact same API as mobile app
+                try:
+                    api_response = call_chatbot_api("booking-history")
+                    logger.info(f"📱 API response status: {api_response.status_code}")
+                    logger.info(f"📱 API response data: {api_response.data}")
 
-            remaining_seconds = max(
-                0, int((booking.end_time - timezone.now()).total_seconds())
-            )
-            minutes = remaining_seconds // 60
-            seconds = remaining_seconds % 60
+                    if api_response.status_code == 200:
+                        bookings = (
+                            api_response.data
+                        )  # Data is returned directly as a list
+                        logger.info(f"📱 Found {len(bookings)} bookings")
 
-            return reply_text(
-                f"📋 Current Booking:\n\n"
-                f"Slot: {booking.parking_spot.spot_number}\n"
-                f"Time Remaining: {minutes}m {seconds}s\n"
-                f"Status: {booking.status}"
-            )
+                        if not bookings:
+                            logger.info("📱 No bookings found")
+                            return reply_text(t("no_bookings"))
 
-        elif menu_choice == 3:  # View booking history
-            user = get_user()
-            bookings = Booking.objects.filter(user=user).order_by("-start_time")[:3]
+                        msg = "📋 Your Recent Bookings:\n\n"
+                        for i, b in enumerate(bookings[:3], 1):
+                            # Get slot from parking_spot data
+                            slot = "Unknown"
+                            if b.get("parking_spot"):
+                                slot = b["parking_spot"].get("spot_number", "Unknown")
 
-            if not bookings:
-                return reply_text(t("no_bookings"))
+                            status = b.get("status", "unknown")
+                            start = b.get("start_time", "-")
+                            end = b.get("end_time", "-")
 
-            msg = "📋 Your Recent Bookings:\n\n"
-            for i, b in enumerate(bookings, 1):
-                start = b.start_time.strftime("%Y-%m-%d %H:%M") if b.start_time else "-"
-                end = b.end_time.strftime("%Y-%m-%d %H:%M") if b.end_time else "-"
-                msg += f"#{i} {b.parking_spot.spot_number} | {b.status}\n"
-                msg += f"Start: {start}\nEnd: {end}\n\n"
+                            # Format dates if they exist
+                            if start and start != "-":
+                                try:
+                                    from datetime import datetime
 
-            return reply_text(msg.strip())
+                                    start_dt = datetime.fromisoformat(
+                                        start.replace("Z", "+00:00")
+                                    )
+                                    start = start_dt.strftime("%Y-%m-%d %H:%M")
+                                except:
+                                    pass
 
-        elif menu_choice == 4:  # Search by date
-            request.session["whatsapp_flow"] = "search_date"
-            return reply_text(
-                "Please enter a date in YYYY-MM-DD format (e.g., 2025-01-15):"
-            )
+                            if end and end != "-":
+                                try:
+                                    from datetime import datetime
 
-        elif menu_choice == 5:  # Report issue
-            request.session["whatsapp_flow"] = "report_issue"
-            return reply_text(
-                "Please describe the issue or problem you're experiencing:"
-            )
+                                    end_dt = datetime.fromisoformat(
+                                        end.replace("Z", "+00:00")
+                                    )
+                                    end = end_dt.strftime("%Y-%m-%d %H:%M")
+                                except:
+                                    pass
 
-        elif menu_choice == 6:  # Help & Support
-            return reply_text(
-                "🅿️ *Smart Parking Help*\n\n"
-                "I can help you with:\n"
-                "• Booking slots\n"
-                "• Checking your booking\n"
-                "• Viewing booking history\n"
-                "• Checking your balance\n"
-                "\nJust type 'menu' to see all options!"
-            )
+                            msg += f"#{i} Slot {slot} | {status}\n"
+                            msg += f"Start: {start}\nEnd: {end}\n\n"
 
-        elif menu_choice == 7:  # Check balance
-            user = get_user()
-            profile = UserProfile.objects.get(user=user)
-            return reply_text(t("balance_is", float(profile.balance)))
+                        logger.info(f"📱 Sending booking history: {msg[:100]}")
+                        return reply_text(msg.strip())
+                    else:
+                        logger.error(
+                            f"📱 API returned status {api_response.status_code}"
+                        )
+                        return reply_text(t("no_bookings"))
+                except Exception as e:
+                    logger.error(f"Error getting booking history: {e}")
+                    import traceback
 
-        elif menu_choice == 8:  # Language selection
-            request.session["whatsapp_flow"] = "choose_language"
-            return reply_text(t("choose_lang"))
+                    logger.error(traceback.format_exc())
+                    return reply_text(t("no_bookings"))
+
+            elif menu_choice == 4:  # Search by date
+                request.session["whatsapp_flow"] = "search_date"
+                return reply_text(
+                    "Please enter a date in YYYY-MM-DD format (e.g., 2025-01-15):"
+                )
+
+            elif menu_choice == 5:  # Report issue
+                request.session["whatsapp_flow"] = "report_issue"
+                return reply_text(
+                    "Please describe the issue or problem you're experiencing:"
+                )
+
+            elif menu_choice == 6:  # Help & Support
+                return reply_text(
+                    "🅿️ *Smart Parking Help*\n\n"
+                    "I can help you with:\n"
+                    "• Booking slots\n"
+                    "• Checking your booking\n"
+                    "• Viewing booking history\n"
+                    "• Checking your balance\n"
+                    "\nJust type 'menu' to see all options!"
+                )
+
+            elif menu_choice == 7:  # Check balance
+                user = get_user()
+                profile = UserProfile.objects.get(user=user)
+                return reply_text(t("balance_is", float(profile.balance)))
+
+            elif menu_choice == 8:  # Language selection
+                request.session["whatsapp_flow"] = "choose_language"
+                return reply_text(t("choose_lang"))
 
         # Language selection handler
         if request.session.get("whatsapp_flow") == "choose_language":
@@ -909,7 +1021,9 @@ def twilio_whatsapp_webhook(request):
 
         # Slot availability check
         if "slots" in body_lower or "available" in body_lower:
-            spots = ParkingSpot.objects.filter(is_occupied=False)
+            spots = ParkingSpot.objects.filter(
+                is_occupied=False, spot_number__in=["A", "B"]
+            )
             if not spots.exists():
                 return reply_text(t("no_slots"))
 
@@ -940,7 +1054,12 @@ def twilio_whatsapp_webhook(request):
                 )
 
             try:
-                # Find available spot
+                # Find available spot (only A or B)
+                if slot_input not in ["A", "B"]:
+                    return reply_text(
+                        "❌ Only slots A and B are available for booking."
+                    )
+
                 spot = ParkingSpot.objects.filter(
                     is_occupied=False, spot_number=slot_input
                 ).first()
@@ -1060,10 +1179,25 @@ def twilio_whatsapp_webhook(request):
             return reply_text(msg.strip())
 
         # Default fallback
-        return reply_text(t("didnt_understand"))
+        # If we get here, we didn't handle the message - send fallback
+        logger.info(f"📱 No handler found for message: '{body}' - sending fallback")
+        return reply_text(
+            "🤔 I didn't understand that. Type 'menu' to see options or 'hi' to start over!"
+        )
 
     except Exception as e:
+        # Always return valid TwiML even on error
         import traceback
 
-        traceback.print_exc()
-        return HttpResponse(f"Error: {e}", content_type="text/plain", status=500)
+        # Log the error for debugging
+        logger.error(f"WhatsApp webhook error: {str(e)}")
+        logger.error(traceback.format_exc())
+
+        # Return a helpful error message in TwiML format
+        resp = MessagingResponse()
+        resp.message(
+            "⚠️ Sorry, I encountered an error. "
+            "Please try again or contact support.\n\n"
+            "Type 'menu' to start over."
+        )
+        return HttpResponse(str(resp), content_type="application/xml")

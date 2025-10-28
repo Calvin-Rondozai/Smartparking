@@ -1,163 +1,30 @@
-// Login functionality for SmartPark Admin
-class AdminLogin {
-  constructor() {
-    this.apiBaseUrl = "http://localhost:8000/api";
-    this.init();
-  }
-
-  init() {
-    this.setupEventListeners();
-    this.checkAuthStatus();
-  }
-
-  setupEventListeners() {
-    const loginForm = document.getElementById("loginForm");
-    if (loginForm) {
-      loginForm.addEventListener("submit", (e) => {
-        e.preventDefault();
-        this.handleLogin();
-      });
-    }
-  }
-
-  async checkAuthStatus() {
-    const token = localStorage.getItem("adminToken");
-    if (token) {
-      try {
-        const response = await fetch(`${this.apiBaseUrl}/auth/verify/`, {
-          method: "GET",
-          headers: {
-            Authorization: `Token ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (response.ok) {
-          // User is already authenticated, redirect to dashboard
-          window.location.href = "index.html";
-        } else {
-          // Token is invalid, remove it
-          localStorage.removeItem("adminToken");
-        }
-      } catch (error) {
-        console.error("Auth check failed:", error);
-        localStorage.removeItem("adminToken");
-      }
-    }
-  }
-
-  async handleLogin() {
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
-
-    if (!username || !password) {
-      this.showError("Please enter both username and password");
-      return;
+public class MultiViewGeometry {
+    // Convert 3D world point to 2D image point using simple pinhole camera model
+    public static double[] project(double[] P, double f) {
+        double x = (f * P[0]) / P[2];
+        double y = (f * P[1]) / P[2];
+        return new double[]{x, y};
     }
 
-    try {
-      this.showLoading();
-
-      const response = await fetch(`${this.apiBaseUrl}/auth/signin/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username: username,
-          password: password,
-          is_admin_login: true, // Flag to indicate this is admin login
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.token) {
-        // Store token
-        localStorage.setItem("adminToken", data.token);
-        localStorage.setItem("adminUser", JSON.stringify(data.user));
-
-        this.showSuccess("Login successful! Redirecting...");
-
-        // Redirect to dashboard after a short delay
-        setTimeout(() => {
-          window.location.href = "index.html";
-        }, 1000);
-      } else {
-        this.showError(
-          data.error || "Login failed. Please check your credentials."
-        );
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-      this.showError("Network error. Please try again.");
-    } finally {
-      this.hideLoading();
-    }
-  }
-
-  showLoading() {
-    const submitBtn = document.querySelector(
-      '#loginForm button[type="submit"]'
-    );
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.innerHTML =
-        '<i class="fas fa-spinner fa-spin"></i> Signing In...';
-    }
-  }
-
-  hideLoading() {
-    const submitBtn = document.querySelector(
-      '#loginForm button[type="submit"]'
-    );
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
-    }
-  }
-
-  showError(message) {
-    const errorDiv = document.getElementById("errorMessage");
-    const successDiv = document.getElementById("successMessage");
-
-    if (errorDiv) {
-      errorDiv.textContent = message;
-      errorDiv.style.display = "block";
+    // Very simple triangulation: estimates depth from two camera views
+    public static double[] triangulate(double[] p1, double[] p2, double baseline, double f) {
+        double disparity = p1[0] - p2[0];
+        double Z = (f * baseline) / disparity;
+        double X = (p1[0] * Z) / f;
+        double Y = (p1[1] * Z) / f;
+        return new double[]{X, Y, Z};
     }
 
-    if (successDiv) {
-      successDiv.style.display = "none";
-    }
-  }
+    public static void main(String[] args) {
+        double[] P = {2, 1, 5}; // real 3D point
+        double f = 100;         // focal length
+        double baseline = 0.5;  // distance between two cameras
 
-  showSuccess(message) {
-    const successDiv = document.getElementById("successMessage");
-    const errorDiv = document.getElementById("errorMessage");
+        double[] p1 = project(P, f);               // Camera 1
+        double[] p2 = {p1[0] - 5, p1[1]};          // Shift for Camera 2
+        double[] result = triangulate(p1, p2, baseline, f);
 
-    if (successDiv) {
-      successDiv.textContent = message;
-      successDiv.style.display = "block";
+        System.out.println("Estimated 3D Point: X=" + result[0] +
+                           " Y=" + result[1] + " Z=" + result[2]);
     }
-
-    if (errorDiv) {
-      errorDiv.style.display = "none";
-    }
-  }
 }
-
-// Password toggle functionality (if needed in future)
-function togglePassword() {
-  const passwordInput = document.getElementById("password");
-
-  if (passwordInput.type === "password") {
-    passwordInput.type = "text";
-  } else {
-    passwordInput.type = "password";
-  }
-}
-
-// Initialize login when DOM is loaded
-document.addEventListener("DOMContentLoaded", () => {
-  new AdminLogin();
-});
