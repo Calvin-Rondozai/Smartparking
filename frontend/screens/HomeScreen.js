@@ -895,8 +895,8 @@ const SmartParkingHome = ({ navigation }) => {
   const WelcomeSection = () => (
     <View style={themedStyles.welcomeSection}>
       <Text style={themedStyles.welcomeText}>Welcome back,</Text>
-      <Text style={themedStyles.nameText}>
-        {userData?.full_name || userData?.first_name || "User"}!
+        <Text style={themedStyles.nameText}>
+          {userData?.full_name || userData?.first_name || "User"}!
       </Text>
       <Text style={themedStyles.subtitleText}>
         Find your perfect parking spot!
@@ -981,84 +981,84 @@ const SmartParkingHome = ({ navigation }) => {
     };
 
     return (
-      <View style={themedStyles.spotCard}>
-        <View style={themedStyles.spotHeader}>
+    <View style={themedStyles.spotCard}>
+      <View style={themedStyles.spotHeader}>
           <View style={themedStyles.spotTitleContainer}>
             <Text style={themedStyles.streetName}>
               {getStreetName(spot.name)}
             </Text>
-            <Text style={themedStyles.spotName}>{spot.name}</Text>
+        <Text style={themedStyles.spotName}>{spot.name}</Text>
           </View>
-          <View
-            style={[
-              themedStyles.availabilityBadge,
-              {
-                backgroundColor: spot.isBookedByUser
-                  ? "#2196F3" // Blue for user's booking
-                  : spot.isAvailable
-                  ? "#4CAF50" // Green for available
-                  : "#F44336", // Red for occupied
-              },
-            ]}
-          >
+        <View
+          style={[
+            themedStyles.availabilityBadge,
+            {
+              backgroundColor: spot.isBookedByUser
+                ? "#2196F3" // Blue for user's booking
+                : spot.isAvailable
+                ? "#4CAF50" // Green for available
+                : "#F44336", // Red for occupied
+            },
+          ]}
+        >
             <Text style={themedStyles.availabilityText}>
               {spot.availability}
             </Text>
-          </View>
         </View>
-        <View style={themedStyles.spotDetails}>
-          <View style={themedStyles.spotInfo}>
-            <Ionicons name="pricetag-outline" size={16} color="#888" />
-            <Text style={themedStyles.spotPrice}>{spot.price}</Text>
-          </View>
-          <View style={themedStyles.spotInfo}>
-            <Ionicons name="star" size={16} color="#FFB800" />
-            <Text style={themedStyles.spotRating}>{spot.rating}</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={[
-            themedStyles.reserveButton,
-            {
-              backgroundColor: spot.isBookedByUser
-                ? "#2196F3"
-                : !spot.canBook && !spot.isBookedByUser
-                ? "#9E9E9E"
-                : themedStyles.reserveButton.backgroundColor,
-            },
-          ]}
-          onPress={() => {
-            if (spot.isBookedByUser) {
-              navigation.navigate("Main", { screen: "Bookings" });
-            } else if (spot.canBook) {
-              navigation.navigate("BookingPage", { slot: spot });
-            } else if (userBookings.length > 0) {
-              Alert.alert(
-                "Multiple Bookings Not Allowed",
-                "You already have an active booking. Please cancel your current booking before making a new one.",
-                [
-                  { text: "OK", style: "default" },
-                  {
-                    text: "View My Booking",
-                    onPress: () =>
-                      navigation.navigate("Main", { screen: "Bookings" }),
-                  },
-                ]
-              );
-            }
-          }}
-          disabled={!spot.canBook && !spot.isBookedByUser}
-        >
-          <Text style={themedStyles.reserveButtonText}>
-            {spot.isBookedByUser
-              ? "View Booking"
-              : !spot.canBook && !spot.isBookedByUser
-              ? "Unavailable"
-              : "Reserve"}
-          </Text>
-        </TouchableOpacity>
       </View>
-    );
+      <View style={themedStyles.spotDetails}>
+        <View style={themedStyles.spotInfo}>
+          <Ionicons name="pricetag-outline" size={16} color="#888" />
+          <Text style={themedStyles.spotPrice}>{spot.price}</Text>
+        </View>
+        <View style={themedStyles.spotInfo}>
+          <Ionicons name="star" size={16} color="#FFB800" />
+          <Text style={themedStyles.spotRating}>{spot.rating}</Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={[
+          themedStyles.reserveButton,
+          {
+            backgroundColor: spot.isBookedByUser
+              ? "#2196F3"
+              : !spot.canBook && !spot.isBookedByUser
+              ? "#9E9E9E"
+              : themedStyles.reserveButton.backgroundColor,
+          },
+        ]}
+        onPress={() => {
+          if (spot.isBookedByUser) {
+            navigation.navigate("Main", { screen: "Bookings" });
+          } else if (spot.canBook) {
+            navigation.navigate("BookingPage", { slot: spot });
+          } else if (userBookings.length > 0) {
+            Alert.alert(
+              "Multiple Bookings Not Allowed",
+              "You already have an active booking. Please cancel your current booking before making a new one.",
+              [
+                { text: "OK", style: "default" },
+                {
+                  text: "View My Booking",
+                  onPress: () =>
+                    navigation.navigate("Main", { screen: "Bookings" }),
+                },
+              ]
+            );
+          }
+        }}
+        disabled={!spot.canBook && !spot.isBookedByUser}
+      >
+        <Text style={themedStyles.reserveButtonText}>
+          {spot.isBookedByUser
+            ? "View Booking"
+            : !spot.canBook && !spot.isBookedByUser
+            ? "Unavailable"
+            : "Reserve"}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
   };
 
   const AvailableSpots = () => (
@@ -1143,38 +1143,38 @@ const SmartParkingHome = ({ navigation }) => {
             </TouchableOpacity>
 
             {/* Wallet Balance Button */}
-            <TouchableOpacity
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderRadius: 10,
-                backgroundColor:
+          <TouchableOpacity
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 10,
+              backgroundColor:
                   Number(wallet.balance || 0) < 0 ? "#FF4444" : "#10B981",
+            }}
+            onPress={() => navigation.navigate("TopUp")}
+          >
+            <Text
+              style={{
+                color: "#fff",
+                fontWeight: "900",
+                fontSize: 16,
+                marginRight: 8,
               }}
-              onPress={() => navigation.navigate("TopUp")}
             >
-              <Text
-                style={{
-                  color: "#fff",
-                  fontWeight: "900",
-                  fontSize: 16,
-                  marginRight: 8,
-                }}
-              >
-                ${Number(wallet.balance || 0).toFixed(2)}
-              </Text>
-              <Ionicons
-                name={
-                  Number(wallet.balance || 0) < 0
-                    ? "warning-outline"
-                    : "add-circle-outline"
-                }
-                size={18}
-                color="#fff"
-              />
-            </TouchableOpacity>
+              ${Number(wallet.balance || 0).toFixed(2)}
+            </Text>
+            <Ionicons
+              name={
+                Number(wallet.balance || 0) < 0
+                  ? "warning-outline"
+                  : "add-circle-outline"
+              }
+              size={18}
+              color="#fff"
+            />
+          </TouchableOpacity>
           </View>
         </View>
         <WelcomeSection />
@@ -1272,7 +1272,7 @@ const SmartParkingHome = ({ navigation }) => {
                   <View
                     style={{
                       padding: 40,
-                      alignItems: "center",
+      alignItems: "center",
                     }}
                   >
                     <Ionicons
@@ -1289,9 +1289,9 @@ const SmartParkingHome = ({ navigation }) => {
                         color: isDark
                           ? "rgba(255, 255, 255, 0.6)"
                           : "rgba(0, 0, 0, 0.6)",
-                        fontSize: 16,
+      fontSize: 16,
                         marginTop: 12,
-                        fontWeight: "500",
+      fontWeight: "500",
                       }}
                     >
                       No slots found
@@ -1301,7 +1301,7 @@ const SmartParkingHome = ({ navigation }) => {
                         color: isDark
                           ? "rgba(255, 255, 255, 0.5)"
                           : "rgba(0, 0, 0, 0.5)",
-                        fontSize: 14,
+      fontSize: 14,
                         marginTop: 4,
                       }}
                     >

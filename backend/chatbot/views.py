@@ -1,4 +1,4 @@
-gitfrom rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
@@ -393,7 +393,7 @@ def twilio_whatsapp_webhook(request):
     translations = {
         "en": {
             "greet": "Greetings👋! I'm Calvin, your Smart Parking assistant!",
-            "menu": "What would you like to do?\n\n1️⃣ Book a slot\n2️⃣ Check current booking\n3️⃣ View booking history\n4️⃣ Search bookings by date\n5️⃣ Report an issue\n6️⃣ Help & Support\n7️⃣ Check balance\n8️⃣ Language\n\nJust type the number (1-8) to select an option!\n\n💡 Tip: Type 'menu' anytime to return here!",
+            "menu": "What would you like to do?\n\n1️⃣ Book a slot\n2️⃣ Check current booking\n3️⃣ View booking history\n4️⃣ Search bookings by date\n5️⃣ Report an issue\n6️⃣ Help & Support\n7️⃣ Check balance\n8️⃣ Language\n9️⃣ Logout\n\nJust type the number (1-9) to select an option!\n\n💡 Tip: Type 'menu' anytime to return here!",
             "booked": lambda slot: f'✅ Successfully booked Slot {slot}!\n\n📱 Navigate to the "Current Bookings" page to view your booking details.',
             "expiry_warn": "⏰ Time expired before you entered the slot.",
             "left_slot": lambda amount: f"🚗 You left the slot. Amount charged: ${amount:.2f}.",
@@ -619,11 +619,23 @@ def twilio_whatsapp_webhook(request):
         flow = request.session.get("whatsapp_flow", "idle")
         menu_mode = request.session.get("whatsapp_menu_mode", False)
 
-        # Handle greeting and menu
+        # Handle greeting and menu - check authentication first
         if intent["type"] == "greet" or body_lower in ("hi", "hello", "menu", "hey"):
-            # Show menu
+            # Check if user is authenticated
+            if not request.session.get("whatsapp_authenticated_user_id"):
+                logger.info(
+                    "📱 Greeting detected but user not authenticated - prompting login"
+                )
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 *Welcome to Smart Parking!*\n\n"
+                    "Please login to continue:\n"
+                    "Enter your username:"
+                )
+
+            # User is authenticated, show menu
             logger.info(
-                f"📱 Greeting detected - intent: {intent['type']}, body: '{body_lower}'"
+                f"📱 Greeting detected - authenticated user, intent: {intent['type']}, body: '{body_lower}'"
             )
             msg = f"{t('greet')}\n\n{t('menu')}"
             request.session["whatsapp_menu_mode"] = True
@@ -808,15 +820,26 @@ def twilio_whatsapp_webhook(request):
             f"📱 Checking menu mode: {request.session.get('whatsapp_menu_mode', False)}"
         )
         logger.info(
-            f"📱 Body matches pattern: {bool(re.match(r'^[1-8]$', body_lower))}"
+            f"📱 Body matches pattern: {bool(re.match(r'^[1-9]$', body_lower))}"
         )
 
         if request.session.get("whatsapp_menu_mode", False) and re.match(
-            r"^[1-8]$", body_lower
+            r"^[1-9]$", body_lower
         ):
             menu_choice = int(body_lower)
             logger.info(f"📱 Menu choice: {menu_choice}")
             request.session["whatsapp_menu_mode"] = False
+
+            # Check authentication for all menu options
+            if not request.session.get("whatsapp_authenticated_user_id"):
+                logger.info(
+                    f"📱 Menu choice {menu_choice} but user not authenticated - prompting login"
+                )
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 Please login first to use this feature:\n"
+                    "Enter your username:"
+                )
 
             if menu_choice == 1:  # Book a slot
                 logger.info("📱 Processing option 1 - Book a slot")
@@ -936,9 +959,10 @@ def twilio_whatsapp_webhook(request):
                     return reply_text(t("no_bookings"))
 
             elif menu_choice == 4:  # Search by date
+                logger.info("📱 Processing option 4 - Search bookings by date")
                 request.session["whatsapp_flow"] = "search_date"
                 return reply_text(
-                    "Please enter a date in YYYY-MM-DD format (e.g., 2025-01-15):"
+                    "📅 Please enter a date in YYYY-MM-DD format (e.g., 2025-01-15):"
                 )
 
             elif menu_choice == 5:  # Report issue
@@ -967,6 +991,20 @@ def twilio_whatsapp_webhook(request):
                 request.session["whatsapp_flow"] = "choose_language"
                 return reply_text(t("choose_lang"))
 
+            elif menu_choice == 9:  # Logout
+                logger.info("📱 Processing option 9 - Logout")
+                # Clear all authentication data
+                request.session.pop("whatsapp_authenticated_user_id", None)
+                request.session.pop("whatsapp_login_username", None)
+                request.session["whatsapp_flow"] = "login_username"
+                request.session["whatsapp_menu_mode"] = False
+
+                return reply_text(
+                    "👋 You have been logged out successfully!\n\n"
+                    "To continue, please login again:\n"
+                    "Enter your username:"
+                )
+
         # Language selection handler
         if request.session.get("whatsapp_flow") == "choose_language":
             if body_lower in ("1", "2", "3"):
@@ -982,33 +1020,71 @@ def twilio_whatsapp_webhook(request):
 
         # Date search handler
         if request.session.get("whatsapp_flow") == "search_date":
+            logger.info(f"📱 Processing date search input: '{body}'")
             date_match = re.match(r"^\d{4}-\d{2}-\d{2}$", body)
             if date_match:
                 date_str = date_match.group()
-                user = get_user()
-                bookings = Booking.objects.filter(user=user).order_by("-start_time")
-                on_date = [
-                    b
-                    for b in bookings
-                    if (b.start_time and b.start_time.strftime("%Y-%m-%d") == date_str)
-                ]
+                logger.info(f"📱 Searching bookings for date: {date_str}")
 
-                if not on_date:
-                    return reply_text(f"No bookings found on {date_str}.")
+                try:
+                    user = get_user()
+                    logger.info(f"📱 Searching bookings for user: {user.username}")
 
-                msg = f"Bookings on {date_str}:\n\n"
-                for i, b in enumerate(on_date[:5], 1):
-                    start = (
-                        b.start_time.strftime("%Y-%m-%d %H:%M") if b.start_time else "-"
+                    # Get all bookings for the user
+                    bookings = Booking.objects.filter(user=user).order_by("-start_time")
+                    logger.info(f"📱 Found {bookings.count()} total bookings for user")
+
+                    # Filter bookings for the specific date
+                    on_date = []
+                    for b in bookings:
+                        if (
+                            b.start_time
+                            and b.start_time.strftime("%Y-%m-%d") == date_str
+                        ):
+                            on_date.append(b)
+
+                    logger.info(f"📱 Found {len(on_date)} bookings on {date_str}")
+
+                    if not on_date:
+                        request.session["whatsapp_flow"] = "idle"
+                        return reply_text(
+                            f"📅 No bookings found on {date_str}.\n\nType 'menu' to see other options."
+                        )
+
+                    msg = f"📅 Bookings on {date_str}:\n\n"
+                    for i, b in enumerate(on_date[:5], 1):
+                        start = (
+                            b.start_time.strftime("%Y-%m-%d %H:%M")
+                            if b.start_time
+                            else "-"
+                        )
+                        end = (
+                            b.end_time.strftime("%Y-%m-%d %H:%M") if b.end_time else "-"
+                        )
+                        slot = getattr(b.parking_spot, "spot_number", "Unknown")
+                        msg += f"#{i} Slot {slot} | {b.status}\n"
+                        msg += f"Start: {start}\nEnd: {end}\n\n"
+
+                    request.session["whatsapp_flow"] = "idle"
+                    logger.info(f"📱 Sending date search results: {msg[:100]}")
+                    return reply_text(msg.strip())
+
+                except Exception as e:
+                    logger.error(f"Error searching bookings by date: {e}")
+                    import traceback
+
+                    logger.error(traceback.format_exc())
+                    request.session["whatsapp_flow"] = "idle"
+                    return reply_text(
+                        f"❌ Error searching bookings: {str(e)}\n\nType 'menu' to try again."
                     )
-                    end = b.end_time.strftime("%Y-%m-%d %H:%M") if b.end_time else "-"
-                    msg += f"#{i} {b.parking_spot.spot_number} | {b.status}\n"
-                    msg += f"Start: {start}\nEnd: {end}\n\n"
-
-                request.session["whatsapp_flow"] = "idle"
-                return reply_text(msg.strip())
             else:
-                return reply_text(t("invalid_date"))
+                logger.info(f"📱 Invalid date format received: '{body}'")
+                return reply_text(
+                    "❌ Invalid date format!\n\n"
+                    "Please enter a date in YYYY-MM-DD format (e.g., 2025-01-15):\n\n"
+                    "Or type 'menu' to go back to main menu."
+                )
 
         # Report issue handler
         if request.session.get("whatsapp_flow") == "report_issue":
@@ -1019,8 +1095,18 @@ def twilio_whatsapp_webhook(request):
             request.session["whatsapp_flow"] = "idle"
             return reply_text(t("report_sent"))
 
-        # Slot availability check
+        # Slot availability check - require authentication
         if "slots" in body_lower or "available" in body_lower:
+            if not request.session.get("whatsapp_authenticated_user_id"):
+                logger.info(
+                    "📱 Slot check requested but user not authenticated - prompting login"
+                )
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 Please login first to check available slots:\n"
+                    "Enter your username:"
+                )
+
             spots = ParkingSpot.objects.filter(
                 is_occupied=False, spot_number__in=["A", "B"]
             )
@@ -1039,8 +1125,17 @@ def twilio_whatsapp_webhook(request):
 
             return reply_text(msg)
 
-        # Book slot handler
+        # Book slot handler - require authentication
         if "book" in body_lower or "reserve" in body_lower:
+            if not request.session.get("whatsapp_authenticated_user_id"):
+                logger.info(
+                    "📱 Booking requested but user not authenticated - prompting login"
+                )
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 Please login first to book a slot:\n" "Enter your username:"
+                )
+
             slot_input = extract_slot(body) or (
                 body_lower.split()[-1].upper()
                 if body_lower.split()[-1] in ("a", "b")
@@ -1113,8 +1208,18 @@ def twilio_whatsapp_webhook(request):
             except Exception as e:
                 return reply_text(f"❌ Booking failed: {str(e)}")
 
-        # Status check handler
+        # Status check handler - require authentication
         if "status" in body_lower or is_current_booking(body):
+            if not request.session.get("whatsapp_authenticated_user_id"):
+                logger.info(
+                    "📱 Status check requested but user not authenticated - prompting login"
+                )
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 Please login first to check your booking status:\n"
+                    "Enter your username:"
+                )
+
             user = get_user()
             booking = (
                 Booking.objects.filter(user=user, status="active")
@@ -1131,21 +1236,41 @@ def twilio_whatsapp_webhook(request):
             minutes = remaining_seconds // 60
             seconds = remaining_seconds % 60
 
-        return reply_text(
-            f"📋 Current Booking:\n\n"
-            f"Slot: {booking.parking_spot.spot_number}\n"
-            f"Time Remaining: {minutes}m {seconds}s\n"
-            f"Status: {booking.status}"
-        )
+            return reply_text(
+                f"📋 Current Booking:\n\n"
+                f"Slot: {booking.parking_spot.spot_number}\n"
+                f"Time Remaining: {minutes}m {seconds}s\n"
+                f"Status: {booking.status}"
+            )
 
-        # Balance check handler
+        # Balance check handler - require authentication
         if "balance" in body_lower:
+            if not request.session.get("whatsapp_authenticated_user_id"):
+                logger.info(
+                    "📱 Balance check requested but user not authenticated - prompting login"
+                )
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 Please login first to check your balance:\n"
+                    "Enter your username:"
+                )
+
             user = get_user()
             profile = UserProfile.objects.get(user=user)
             return reply_text(t("balance_is", float(profile.balance)))
 
-        # Cancel booking handler
+        # Cancel booking handler - require authentication
         if is_cancel_intent(body):
+            if not request.session.get("whatsapp_authenticated_user_id"):
+                logger.info(
+                    "📱 Cancel booking requested but user not authenticated - prompting login"
+                )
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 Please login first to cancel your booking:\n"
+                    "Enter your username:"
+                )
+
             user = get_user()
             booking = (
                 Booking.objects.filter(user=user, status="active")
@@ -1161,8 +1286,18 @@ def twilio_whatsapp_webhook(request):
 
             return reply_text(t("booking_cancelled"))
 
-        # History check handler
+        # History check handler - require authentication
         if "history" in body_lower or "bookings" in body_lower:
+            if not request.session.get("whatsapp_authenticated_user_id"):
+                logger.info(
+                    "📱 History check requested but user not authenticated - prompting login"
+                )
+                request.session["whatsapp_flow"] = "login_username"
+                return reply_text(
+                    "🔐 Please login first to view your booking history:\n"
+                    "Enter your username:"
+                )
+
             user = get_user()
             bookings = Booking.objects.filter(user=user).order_by("-start_time")[:3]
 
