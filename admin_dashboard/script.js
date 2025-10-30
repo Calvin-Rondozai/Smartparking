@@ -1,4 +1,4 @@
-git// Admin Dashboard JavaScript
+// Admin Dashboard JavaScript
 class SmartParkAdmin {
   constructor() {
     this.currentSection = "dashboard";
