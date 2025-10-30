@@ -1157,27 +1157,27 @@ class SmartParkAdmin {
     const url = `${this.apiBaseUrl}/admin/user-reports/`;
     console.log("Fallback fetching alerts from:", url);
     try {
-    const resp = await fetch(url, {
+      const resp = await fetch(url, {
         headers: {
           Authorization: `Token ${this.token}`,
           "Content-Type": "application/json",
         },
-      cache: "no-store",
-    });
+        cache: "no-store",
+      });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    const list = Array.isArray(data)
-      ? data
-      : data.reports || data.results || [];
-    this.alerts = (list || []).map((a, idx) => ({
-      id: a.id ?? idx,
-      type: a.type || a.priority || "info",
-      title: a.title || (a.type === "user_report" ? "User Report" : "Alert"),
-      message: a.message || a.detail || a.description || "",
-      created_at: a.created_at || a.timestamp || new Date().toISOString(),
+      const data = await resp.json();
+      const list = Array.isArray(data)
+        ? data
+        : data.reports || data.results || [];
+      this.alerts = (list || []).map((a, idx) => ({
+        id: a.id ?? idx,
+        type: a.type || a.priority || "info",
+        title: a.title || (a.type === "user_report" ? "User Report" : "Alert"),
+        message: a.message || a.detail || a.description || "",
+        created_at: a.created_at || a.timestamp || new Date().toISOString(),
         priority: a.priority || "medium",
         user: a.user || null,
-    }));
+      }));
     } catch (e) {
       console.log("Fallback alerts fetch failed:", e);
       this.alerts = this.alerts || [];
@@ -1224,8 +1224,8 @@ class SmartParkAdmin {
         `${this.apiBaseUrl}/admin/alerts/unbooked-occupied/`,
         {
           headers: {
-              Authorization: `Token ${this.token}`,
-              "Content-Type": "application/json",
+            Authorization: `Token ${this.token}`,
+            "Content-Type": "application/json",
           },
         }
       );
@@ -1291,12 +1291,12 @@ class SmartParkAdmin {
 
     // Sort alerts by date and limit to 50
     this.alerts = alerts
-          .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
-          .slice(0, 50);
+      .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
+      .slice(0, 50);
 
-        console.log("Final alerts:", this.alerts);
-        this.updateAlerts(this.alerts);
-        this.renderAlertsList(this.alerts);
+    console.log("Final alerts:", this.alerts);
+    this.updateAlerts(this.alerts);
+    this.renderAlertsList(this.alerts);
 
     try {
       this.updateAlertsBadge();
@@ -2639,15 +2639,12 @@ class SmartParkAdmin {
       console.log("Loading occupancy data from ESP32 (same as mobile app)...");
 
       // Use the same endpoint as mobile app
-      const response = await fetch(
-        `${this.apiBaseUrl}/iot/parking/availability/`,
-        {
-          headers: {
-            Authorization: `Token ${this.token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await fetch(`${this.iotApiUrl}/parking/availability/`, {
+        headers: {
+          Authorization: `Token ${this.token}`,
+          "Content-Type": "application/json",
+        },
+      });
 
       if (!response.ok) {
         throw new Error(
@@ -3575,7 +3572,7 @@ class SmartParkAdmin {
 
   async fetchRealDevices() {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/iot/devices/`, {
+      const response = await fetch(`${this.iotApiUrl}/devices/`, {
         headers: {
           Authorization: `Token ${this.token}`,
           "Content-Type": "application/json",
@@ -3597,7 +3594,7 @@ class SmartParkAdmin {
 
   async fetchDeviceDetails() {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/iot/devices/details/`, {
+      const response = await fetch(`${this.iotApiUrl}/devices/details/`, {
         headers: {
           Authorization: `Token ${this.token}`,
           "Content-Type": "application/json",
@@ -3626,7 +3623,7 @@ class SmartParkAdmin {
 
   async fetchDeviceAlerts() {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/iot/alerts/`, {
+      const response = await fetch(`${this.iotApiUrl}/alerts/`, {
         headers: {
           Authorization: `Token ${this.token}`,
           "Content-Type": "application/json",

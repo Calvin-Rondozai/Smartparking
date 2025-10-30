@@ -58,3 +58,13 @@
 
 - If API endpoints differ, update `apiBaseUrl` and `iotApiUrl` in `admin_dashboard/script.js`.
 - Staff users will see read-only actions on dashboard resources.
+
+### Dev Quick Start (Windows)
+
+- From repo root, run:
+  - PowerShell: `powershell -ExecutionPolicy Bypass -File .\start_dev.ps1`
+  - This starts:
+    - Backend: `http://localhost:8000`
+    - Admin dashboard: `http://localhost:5500`
+- If the login page can’t reach the backend, in browser DevTools console run:
+  - `localStorage.setItem('backendOrigin', 'http://localhost:8000')`
