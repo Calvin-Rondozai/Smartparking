@@ -1,6 +1,5 @@
 t<#
 SmartParking Dev Starter (Windows PowerShell)
-
 What it does:
 - Starts Django backend on http://localhost:8000 (in a new window)
 - Serves admin_dashboard on http://localhost:5500 (current window)

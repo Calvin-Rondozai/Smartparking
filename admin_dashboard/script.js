@@ -1169,32 +1169,32 @@ class SmartParkAdmin {
     const url = `${this.apiBaseUrl}/admin/user-reports/`;
     console.log("Fallback fetching alerts from:", url);
     try {
-    const resp = await fetch(url, {
+      const resp = await fetch(url, {
         headers: {
           Authorization: `Token ${this.token}`,
           "Content-Type": "application/json",
         },
-      cache: "no-store",
-    });
+        cache: "no-store",
+      });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    const list = Array.isArray(data)
-      ? data
-      : data.reports || data.results || [];
+      const data = await resp.json();
+      const list = Array.isArray(data)
+        ? data
+        : data.reports || data.results || [];
       // Normalize to stable IDs so read/resolved state persists across refreshes
-    this.alerts = (list || []).map((a, idx) => ({
+      this.alerts = (list || []).map((a, idx) => ({
         id:
           a && a.id !== undefined && a.id !== null
             ? `report_${a.id}`
             : `report_${idx}`,
         type: a.type || "user_report",
         title: a.title || "User Report",
-      message: a.message || a.detail || a.description || "",
-      created_at: a.created_at || a.timestamp || new Date().toISOString(),
+        message: a.message || a.detail || a.description || "",
+        created_at: a.created_at || a.timestamp || new Date().toISOString(),
         priority: a.priority || "medium",
         user: a.user || null,
         status: a.status || "pending",
-    }));
+      }));
     } catch (e) {
       console.log("Fallback alerts fetch failed:", e);
       this.alerts = this.alerts || [];
@@ -1241,8 +1241,8 @@ class SmartParkAdmin {
         `${this.apiBaseUrl}/admin/alerts/unbooked-occupied/`,
         {
           headers: {
-              Authorization: `Token ${this.token}`,
-              "Content-Type": "application/json",
+            Authorization: `Token ${this.token}`,
+            "Content-Type": "application/json",
           },
         }
       );
@@ -1309,12 +1309,12 @@ class SmartParkAdmin {
 
     // Sort alerts by date and limit to 50
     this.alerts = alerts
-          .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
-          .slice(0, 50);
+      .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
+      .slice(0, 50);
 
-        console.log("Final alerts:", this.alerts);
-        this.updateAlerts(this.alerts);
-        this.renderAlertsList(this.alerts);
+    console.log("Final alerts:", this.alerts);
+    this.updateAlerts(this.alerts);
+    this.renderAlertsList(this.alerts);
 
     try {
       this.updateAlertsBadge();
@@ -2743,10 +2743,10 @@ class SmartParkAdmin {
 
       // Use the same endpoint as mobile app
       const response = await fetch(`${this.iotApiUrl}/parking/availability/`, {
-          headers: {
-            Authorization: `Token ${this.token}`,
-            "Content-Type": "application/json",
-          },
+        headers: {
+          Authorization: `Token ${this.token}`,
+          "Content-Type": "application/json",
+        },
       });
 
       if (!response.ok) {
@@ -4804,7 +4804,7 @@ class SmartParkAdmin {
               <td style="padding:12px;">${user.username || "N/A"}</td>
               <td style="padding:12px;">${user.email || "N/A"}</td>
               <td style="padding:12px;"><span style="color:#F44336;font-weight:bold;">$${parseFloat(
-                    user.balance || user.profile?.balance || 0
+                user.balance || user.profile?.balance || 0
               ).toFixed(2)}</span></td>
               <td style="padding:12px;">${
                 user.last_login
@@ -5372,26 +5372,6 @@ class SmartParkAdmin {
           </div>
         </div>
         
-        <div style="margin-bottom: 24px;">
-          <h4 style="margin: 0 0 16px 0; color: var(--dark-gray);">Activity & Usage</h4>
-          <div style="background: var(--light-gray); padding: 16px; border-radius: 8px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-              <div>
-                <strong>Total Bookings:</strong><br>
-                <span style="font-size: 18px; color: var(--primary-green); font-weight: 600;">${
-                  user.total_bookings
-                }</span>
-              </div>
-              <div>
-                <strong>Total Spent:</strong><br>
-                <span style="font-size: 18px; color: var(--primary-green); font-weight: 600;">$${(
-                  user.total_spent || 0
-                ).toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
         <div style="display: flex; gap: 12px; justify-content: flex-end;">
           <button onclick="dashboard.resetUserPassword(${
             user.id
@@ -5556,7 +5536,7 @@ class SmartParkAdmin {
           }
         } else {
           // Fallback to refetch all users if needed
-        await this.loadUsersData();
+          await this.loadUsersData();
         }
         return true;
       } else {
