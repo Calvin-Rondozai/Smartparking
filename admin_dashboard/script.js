@@ -757,7 +757,6 @@ class SmartParkAdmin {
     // fallback demo
     return this.normalizeReports(this.demoReports());
   }
-
   normalizeReports(raw) {
     // Expected fields with fallbacks
     const totals = raw.totals || raw.summary || {};
@@ -1479,7 +1478,6 @@ class SmartParkAdmin {
     }
     this.viewReport(report);
   }
-
   // Unified report viewer; accepts a full report object
   viewReport(report) {
     // Mark as read and persist, then re-render list so it turns green
@@ -2279,7 +2277,6 @@ class SmartParkAdmin {
       this.showNotification("Failed to delete user", "error");
     }
   }
-
   exportUsersCSV() {
     const rows = [
       ["Name", "Email", "Role", "Active", "Bookings", "Joined"],
@@ -3080,7 +3077,6 @@ class SmartParkAdmin {
       lastUpdateEl.textContent = "Updated just now";
     }
   }
-
   getTimeAgo(date) {
     const now = new Date();
     const diffInSeconds = Math.floor((now - date) / 1000);
@@ -3870,7 +3866,6 @@ class SmartParkAdmin {
       </div>
     `;
   }
-
   renderDeviceCard(device, detailedDevices, alerts) {
     const isOnline = this.isDeviceOnline(device);
     const deviceDetails = detailedDevices.find((d) => d.id === device.id) || {};
@@ -4598,7 +4593,6 @@ class SmartParkAdmin {
     // Redisplay with new numbering
     this.displayBookings(this.allBookings);
   }
-
   viewBookingDetails(bookingId) {
     const booking = this.allBookings.find((b) => b.id === bookingId);
     if (!booking) return;
@@ -5209,7 +5203,6 @@ class SmartParkAdmin {
       </tr>
     `;
   }
-
   async viewUserDetails(userId) {
     const users = await this.fetchAllUsers();
     const user = users.find((u) => u.id === userId);
@@ -5961,7 +5954,6 @@ class SmartParkAdmin {
       this.showNotification("Network error. Please try again.", "error");
     }
   }
-
   async viewDeviceDetails(deviceId) {
     const device = this.deviceDetails?.devices?.find((d) => d.id === deviceId);
     if (!device) return;
@@ -6760,7 +6752,6 @@ class SmartParkAdmin {
       this.showNotification("Failed to load table data", "error");
     }
   }
-
   // Chart initialization methods
   initRevenueChart(bookingsData) {
     const ctx = document.getElementById("revenueChart");
@@ -6810,14 +6801,17 @@ class SmartParkAdmin {
   }
 
   processRevenueDataFromBookings(bookings) {
-    // Aggregate total_cost by day (local date) from real bookings
+    // Aggregate amount or total_cost by day (local date) from real bookings
     const map = new Map();
     bookings.forEach((b) => {
       const dt = new Date(b.completed_at || b.end_time || b.start_time);
       if (isNaN(dt)) return;
       const key = dt.toISOString().slice(0, 10); // yyyy-mm-dd
       const prev = map.get(key) || 0;
-      const amount = parseFloat(b.total_cost || 0);
+      const amount =
+        b.amount !== undefined && b.amount !== null
+          ? parseFloat(b.amount)
+          : parseFloat(b.total_cost || 0);
       map.set(key, prev + (isNaN(amount) ? 0 : amount));
     });
 
@@ -6994,15 +6988,17 @@ class SmartParkAdmin {
       }
 
       if (userId) {
+        const amount =
+          booking.amount !== undefined && booking.amount !== null
+            ? parseFloat(booking.amount)
+            : parseFloat(booking.total_cost || 0);
         if (userBookings[userId]) {
           userBookings[userId].count++;
-          userBookings[userId].totalSpent += parseFloat(
-            booking.total_cost || 0
-          );
+          userBookings[userId].totalSpent += isNaN(amount) ? 0 : amount;
         } else {
           userBookings[userId] = {
             count: 1,
-            totalSpent: parseFloat(booking.total_cost || 0),
+            totalSpent: isNaN(amount) ? 0 : amount,
           };
         }
       }
@@ -7161,7 +7157,11 @@ class SmartParkAdmin {
   calculateMetricsFromData(bookings, stats) {
     // Calculate total revenue
     const totalRevenue = bookings.reduce((sum, booking) => {
-      return sum + (parseFloat(booking.total_cost) || 0);
+      const amount =
+        booking.amount !== undefined && booking.amount !== null
+          ? parseFloat(booking.amount)
+          : parseFloat(booking.total_cost);
+      return sum + (isNaN(amount) ? 0 : amount);
     }, 0);
 
     // Calculate total bookings
@@ -7220,7 +7220,11 @@ class SmartParkAdmin {
     });
 
     const totalRevenue = previousBookings.reduce((sum, booking) => {
-      return sum + (parseFloat(booking.total_cost) || 0);
+      const amount =
+        booking.amount !== undefined && booking.amount !== null
+          ? parseFloat(booking.amount)
+          : parseFloat(booking.total_cost);
+      return sum + (isNaN(amount) ? 0 : amount);
     }, 0);
 
     return {
@@ -7549,7 +7553,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Make dashboard globally accessible for onclick handlers
   window.dashboard = dashboard;
 });
-
 // Add CSS for animations
 const style = document.createElement("style");
 style.textContent = `
