@@ -1,4 +1,4 @@
-// Admin Dashboard JavaScript
+git// Admin Dashboard JavaScript
 class SmartParkAdmin {
   constructor() {
     this.currentSection = "dashboard";
@@ -1169,10 +1169,14 @@ class SmartParkAdmin {
       const list = Array.isArray(data)
         ? data
         : data.reports || data.results || [];
+      // Normalize to stable IDs so read/resolved state persists across refreshes
       this.alerts = (list || []).map((a, idx) => ({
-        id: a.id ?? idx,
-        type: a.type || a.priority || "info",
-        title: a.title || (a.type === "user_report" ? "User Report" : "Alert"),
+        id:
+          a && a.id !== undefined && a.id !== null
+            ? `report_${a.id}`
+            : `report_${idx}`,
+        type: a.type || "user_report",
+        title: a.title || "User Report",
         message: a.message || a.detail || a.description || "",
         created_at: a.created_at || a.timestamp || new Date().toISOString(),
         priority: a.priority || "medium",
@@ -1346,10 +1350,12 @@ class SmartParkAdmin {
           }
           return String(u);
         })();
+        const isRead = this._readReports && this._readReports.has(String(a.id));
+        const borderColor = isRead ? "var(--primary-green)" : "var(--red)";
         return `
       <div class="alert-item ${
         a.type
-      }" style="background:white; border-radius:12px; box-shadow: var(--shadow-sm); padding:16px; margin:10px 0; display:flex; gap:12px; align-items:flex-start; border-left:4px solid var(--primary-green);">
+      }" style="background:white; border-radius:12px; box-shadow: var(--shadow-sm); padding:16px; margin:10px 0; display:flex; gap:12px; align-items:flex-start; border-left:4px solid ${borderColor};">
         <div class="alert-icon" style="width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background: rgba(16,185,129,0.12); color: var(--primary-green);">
           <i class="fas fa-${icon(a.type)}"></i>
         </div>
@@ -1367,6 +1373,9 @@ class SmartParkAdmin {
           ).toLocaleString()}</div>
         </div>
         <div class="alert-actions">
+          <button class="btn btn-sm" onclick="dashboard.viewReportById('${
+            a.id
+          }')">View</button>
           <button class="btn btn-sm btn-outline" onclick="dashboard.resolveReport('${
             a.id
           }')">Resolved</button>
@@ -1382,11 +1391,66 @@ class SmartParkAdmin {
       this.showNotification("Report not found", "error");
       return;
     }
+    // Mark as resolved/read locally and persist
+    try {
+      if (!this._readReports) this._readReports = new Set();
+      this._readReports.add(String(id));
+      localStorage.setItem(
+        "alertsReadIds",
+        JSON.stringify(Array.from(this._readReports))
+      );
+      if (!this._resolvedReports) this._resolvedReports = new Set();
+      this._resolvedReports.add(String(id));
+      // Update in-memory alert status if present
+      (this.alerts || []).forEach((a) => {
+        if (String(a.id) === String(id)) a.status = "resolved";
+      });
+    } catch (_) {}
+
+    // Re-render list and update badge count immediately
+    this.renderAlertsList(this.alerts || []);
+    this.updateAlertsBadge();
+
+    // Best-effort backend persist (strip any prefix like "report_")
+    try {
+      const numericId = String(id).startsWith("report_")
+        ? String(id).replace(/^report_/, "")
+        : String(id);
+      fetch(`${this.apiBaseUrl}/admin/user-reports/${numericId}/resolve/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${this.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "resolved" }),
+      });
+    } catch (_) {}
+
+    this.showNotification("Report marked as resolved.", "success");
+  }
+
+  viewReportById(id) {
+    const report = (this.alerts || []).find((a) => String(a.id) === String(id));
+    if (!report) {
+      this.showNotification("Report not found", "error");
+      return;
+    }
     this.viewReport(report);
   }
 
   // Unified report viewer; accepts a full report object
   viewReport(report) {
+    // Mark as read and persist, then re-render list so it turns green
+    try {
+      if (!this._readReports) this._readReports = new Set();
+      this._readReports.add(String(report.id));
+      localStorage.setItem(
+        "alertsReadIds",
+        JSON.stringify(Array.from(this._readReports))
+      );
+      this.renderAlertsList(this.alerts || []);
+    } catch (_) {}
+
     const modal = document.createElement("div");
     modal.className = "modal-overlay";
     modal.style.cssText = `
@@ -3580,7 +3644,7 @@ class SmartParkAdmin {
       });
 
       if (response.status === 401) {
-        this.logout();
+        // Allow devices view to load without auth
         return [];
       }
 
@@ -3602,7 +3666,7 @@ class SmartParkAdmin {
       });
 
       if (response.status === 401) {
-        this.logout();
+        // Allow devices view to load without auth
         return;
       }
 
@@ -3631,7 +3695,7 @@ class SmartParkAdmin {
       });
 
       if (response.status === 401) {
-        this.logout();
+        // Allow devices view to load without auth
         return [];
       }
 
