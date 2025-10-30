@@ -17,6 +17,7 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
+from chatbot import admin_auth  # direct wiring for critical admin auth endpoints
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -24,4 +25,16 @@ urlpatterns = [
     path("api/iot/", include("iot_integration.urls")),
     path("api/chatbot/", include("chatbot.urls")),
     path("api/ai/", include("ai_analytics.urls")),
+    # Hard-wire admin auth endpoints to ensure availability
+    path("api/chatbot/admin-login/", admin_auth.admin_login, name="admin_login_direct"),
+    path(
+        "api/chatbot/auth/verify/", admin_auth.verify_token, name="verify_token_direct"
+    ),
+    # Additional aliases for robustness
+    path("api/admin-login/", admin_auth.admin_login, name="admin_login_alias_root"),
+    path(
+        "api/chatbot/login-admin/",
+        admin_auth.admin_login,
+        name="admin_login_alias_variant",
+    ),
 ]

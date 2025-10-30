@@ -592,6 +592,7 @@ def signin(request):
     try:
         username = request.data.get("username")
         password = request.data.get("password")
+        email = request.data.get("email")
         is_admin_login = request.data.get(
             "is_admin_login", False
         )  # Flag to check if this is admin login
@@ -605,21 +606,63 @@ def signin(request):
             is_admin_login,
         )
 
-        if not username or not password:
+        if not (username or email) or not password:
             return Response(
-                {"error": "Username and password are required"},
+                {"error": "Username/email and password are required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Trim whitespace from username and make it case-insensitive
-        username = username.strip()
+        # Normalize input
+        username = (username or "").strip()
+        email = (email or "").strip().lower()
 
-        # Try to find user with case-insensitive username lookup
-        try:
-            user_obj = User.objects.get(username__iexact=username)
-            # Use the actual username from database for authentication
-            user = authenticate(username=user_obj.username, password=password)
-        except User.DoesNotExist:
+        # Resolve the account by username or email in one go
+        from django.db.models import Q
+
+        resolved_user = None
+        lookup_values = []
+        if username:
+            lookup_values.append(username)
+        if email and email not in lookup_values:
+            lookup_values.append(email)
+
+        for val in lookup_values:
+            try:
+                candidate = User.objects.filter(
+                    Q(username__iexact=val) | Q(email__iexact=val)
+                ).first()
+                if candidate:
+                    resolved_user = candidate
+                    break
+            except Exception:
+                pass
+
+        # Optional fallback: allow login using phone number stored in profile
+        if resolved_user is None and username:
+            try:
+                profile_candidate = (
+                    UserProfile.objects.select_related("user")
+                    .filter(
+                        Q(phone_number__iexact=username) | Q(phone__iexact=username)
+                    )
+                    .first()
+                )
+                if profile_candidate:
+                    resolved_user = profile_candidate.user
+            except Exception:
+                pass
+
+        # If account exists but is inactive, return explicit message
+        if resolved_user is not None and not getattr(resolved_user, "is_active", True):
+            return Response(
+                {"error": "Account is deactivated. Please contact support."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # Authenticate if we resolved an account
+        if resolved_user is not None:
+            user = authenticate(username=resolved_user.username, password=password)
+        else:
             user = None
         print("SIGNIN user:", user)
 
@@ -2007,6 +2050,11 @@ class BookingList(generics.ListCreateAPIView):
                 "status": "active",
                 "grace_period_started": now,  # Start grace period; timer starts on detect
                 "timer_started": None,  # Timer will start when car is detected
+                "number_plate": (
+                    getattr(self.request.user.profile, "number_plate", "")
+                    if hasattr(self.request.user, "profile")
+                    else ""
+                ),
             }
 
             print(f"Creating booking with data: {booking_data}")

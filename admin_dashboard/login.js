@@ -1,30 +1,119 @@
-public class MultiViewGeometry {
-    // Convert 3D world point to 2D image point using simple pinhole camera model
-    public static double[] project(double[] P, double f) {
-        double x = (f * P[0]) / P[2];
-        double y = (f * P[1]) / P[2];
-        return new double[]{x, y};
+// SmartPark Admin Login (JavaScript)
+
+(() => {
+  const form = document.getElementById("loginForm");
+  const usernameEl = document.getElementById("username");
+  const passwordEl = document.getElementById("password");
+  const errorEl = document.getElementById("errorMessage");
+  const successEl = document.getElementById("successMessage");
+
+  // Always target Django backend for API calls (default http://localhost:8000).
+  // Optionally override via localStorage: backendOrigin
+  let BACKEND_ORIGIN =
+    (typeof window !== "undefined" &&
+      window.localStorage &&
+      window.localStorage.getItem("backendOrigin")) ||
+    "http://localhost:8000";
+  // If served from port 5500 and no override set, assume backend on 8000
+  if (
+    typeof window !== "undefined" &&
+    window.location &&
+    window.location.port === "5500" &&
+    (!window.localStorage || !window.localStorage.getItem("backendOrigin"))
+  ) {
+    BACKEND_ORIGIN = "http://localhost:8000";
+  }
+  const PRIMARY_LOGIN = `${BACKEND_ORIGIN}/api/chatbot/admin-login/`;
+  const ALT_LOGIN_1 = `${BACKEND_ORIGIN}/api/admin-login/`;
+  const ALT_LOGIN_2 = `${BACKEND_ORIGIN}/api/chatbot/login-admin/`;
+
+  function showError(msg) {
+    if (successEl) successEl.style.display = "none";
+    if (errorEl) {
+      errorEl.textContent = msg || "Login failed";
+      errorEl.style.display = "block";
+    } else {
+      alert(msg || "Login failed");
+    }
+  }
+
+  function showSuccess(msg) {
+    if (errorEl) errorEl.style.display = "none";
+    if (successEl) {
+      successEl.textContent = msg || "Login successful";
+      successEl.style.display = "block";
+    }
+  }
+
+  if (form) {
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = (usernameEl?.value || "").trim();
+      const password = passwordEl?.value || ""; // preserve spaces
+
+    if (!username || !password) {
+        showError("Please enter username and password");
+      return;
     }
 
-    // Very simple triangulation: estimates depth from two camera views
-    public static double[] triangulate(double[] p1, double[] p2, double baseline, double f) {
-        double disparity = p1[0] - p2[0];
-        double Z = (f * baseline) / disparity;
-        double X = (p1[0] * Z) / f;
-        double Y = (p1[1] * Z) / f;
-        return new double[]{X, Y, Z};
-    }
+    try {
+        // Try primary admin-login endpoint first
+        let resp = await fetch(PRIMARY_LOGIN, {
+        method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
 
-    public static void main(String[] args) {
-        double[] P = {2, 1, 5}; // real 3D point
-        double f = 100;         // focal length
-        double baseline = 0.5;  // distance between two cameras
+        // If 404, try aliases
+        if (resp.status === 404) {
+          resp = await fetch(ALT_LOGIN_1, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+          });
+          if (resp.status === 404) {
+            resp = await fetch(ALT_LOGIN_2, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ username, password }),
+            });
+          }
+        }
 
-        double[] p1 = project(P, f);               // Camera 1
-        double[] p2 = {p1[0] - 5, p1[1]};          // Shift for Camera 2
-        double[] result = triangulate(p1, p2, baseline, f);
+        const raw = await resp.text();
+        let data = {};
+        try {
+          data = JSON.parse(raw);
+        } catch (_) {}
+        if (!resp.ok || !data.success) {
+          console.error("Admin login failed", {
+            url: PRIMARY_LOGIN,
+            status: resp.status,
+            body: raw,
+          });
+          showError(
+            data?.error || data?.message || `Login failed (${resp.status})`
+          );
+          return;
+        }
 
-        System.out.println("Estimated 3D Point: X=" + result[0] +
-                           " Y=" + result[1] + " Z=" + result[2]);
-    }
-}
+        const token = data?.token;
+        if (!token) {
+          showError("No token returned by server");
+          return;
+        }
+
+        // Persist token for dashboard script.js to use
+        window.localStorage.setItem("adminToken", token);
+        window.localStorage.setItem("adminUser", JSON.stringify(data.user));
+
+        showSuccess("Logged in. Redirecting...");
+        setTimeout(() => {
+          window.location.href = "index.html";
+        }, 400);
+      } catch (err) {
+        showError("Network error. Please try again.");
+      }
+    });
+  }
+})();

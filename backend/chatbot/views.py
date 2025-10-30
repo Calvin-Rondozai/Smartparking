@@ -145,6 +145,11 @@ def reserve_slot(request):
             status="active",
             grace_period_started=start,  # Enable timer detection
             timer_started=None,  # Will be set when car detected
+            number_plate=(
+                getattr(request.user.profile, "number_plate", "")
+                if hasattr(request.user, "profile")
+                else ""
+            ),
         )
         return Response(BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
     except ParkingSpot.DoesNotExist:
@@ -498,9 +503,10 @@ def twilio_whatsapp_webhook(request):
             return val(*args)
         return val or key
 
-    def reply_text(text: str) -> HttpResponse:
-        resp = MessagingResponse()
-        resp.message(text)
+        def reply_text(text: str) -> HttpResponse:
+            resp = MessagingResponse()
+            resp.message(text)
+
         logger.info(f"📤 Replying with: {text[:100]}")
         return HttpResponse(str(resp), content_type="application/xml")
 
@@ -510,7 +516,7 @@ def twilio_whatsapp_webhook(request):
         for msg in messages:
             resp.message(msg)
             logger.info(f"📤 Replying with: {msg[:100]}")
-        return HttpResponse(str(resp), content_type="application/xml")
+            return HttpResponse(str(resp), content_type="application/xml")
 
     # Intent parsing helpers
     def normalize(s):
@@ -1189,6 +1195,7 @@ def twilio_whatsapp_webhook(request):
                     status="active",
                     grace_period_started=now,
                     timer_started=None,
+                    number_plate=getattr(profile, "number_plate", ""),
                 )
 
                 # Trigger ESP32 LED
@@ -1250,10 +1257,9 @@ def twilio_whatsapp_webhook(request):
                     "📱 Balance check requested but user not authenticated - prompting login"
                 )
                 request.session["whatsapp_flow"] = "login_username"
-                return reply_text(
-                    "🔐 Please login first to check your balance:\n"
-                    "Enter your username:"
-                )
+            return reply_text(
+                "🔐 Please login first to check your balance:\n" "Enter your username:"
+            )
 
             user = get_user()
             profile = UserProfile.objects.get(user=user)
@@ -1266,10 +1272,9 @@ def twilio_whatsapp_webhook(request):
                     "📱 Cancel booking requested but user not authenticated - prompting login"
                 )
                 request.session["whatsapp_flow"] = "login_username"
-                return reply_text(
-                    "🔐 Please login first to cancel your booking:\n"
-                    "Enter your username:"
-                )
+            return reply_text(
+                "🔐 Please login first to cancel your booking:\n" "Enter your username:"
+            )
 
             user = get_user()
             booking = (
@@ -1293,10 +1298,10 @@ def twilio_whatsapp_webhook(request):
                     "📱 History check requested but user not authenticated - prompting login"
                 )
                 request.session["whatsapp_flow"] = "login_username"
-                return reply_text(
-                    "🔐 Please login first to view your booking history:\n"
-                    "Enter your username:"
-                )
+            return reply_text(
+                "🔐 Please login first to view your booking history:\n"
+                "Enter your username:"
+            )
 
             user = get_user()
             bookings = Booking.objects.filter(user=user).order_by("-start_time")[:3]
