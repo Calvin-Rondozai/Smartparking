@@ -28,6 +28,19 @@ class SmartParkAdmin {
     } catch (_) {
       this._readReports = new Set();
     }
+    // Track resolved reports (persisted)
+    try {
+      const savedResolved = JSON.parse(
+        localStorage.getItem("alertsResolvedIds") || "[]"
+      );
+      this._resolvedReports = new Set(
+        (Array.isArray(savedResolved) ? savedResolved : []).map((v) =>
+          String(v)
+        )
+      );
+    } catch (_) {
+      this._resolvedReports = new Set();
+    }
     this.userSearchQuery = "";
     this.userSort = { field: "date_joined", direction: "desc" };
 
@@ -1181,6 +1194,7 @@ class SmartParkAdmin {
         created_at: a.created_at || a.timestamp || new Date().toISOString(),
         priority: a.priority || "medium",
         user: a.user || null,
+        status: a.status || "pending",
       }));
     } catch (e) {
       console.log("Fallback alerts fetch failed:", e);
@@ -1286,6 +1300,7 @@ class SmartParkAdmin {
             })()}`,
             message: report.message,
             created_at: report.created_at || new Date().toISOString(),
+            status: report.status || "pending",
           });
         });
       }
@@ -1350,8 +1365,12 @@ class SmartParkAdmin {
           }
           return String(u);
         })();
+        const isResolved =
+          (this._resolvedReports && this._resolvedReports.has(String(a.id))) ||
+          String(a.status) === "resolved";
         const isRead = this._readReports && this._readReports.has(String(a.id));
-        const borderColor = isRead ? "var(--primary-green)" : "var(--red)";
+        const borderColor =
+          isResolved || isRead ? "var(--primary-green)" : "var(--red)";
         return `
       <div class="alert-item ${
         a.type
@@ -1378,7 +1397,7 @@ class SmartParkAdmin {
           }')">View</button>
           <button class="btn btn-sm btn-outline" onclick="dashboard.resolveReport('${
             a.id
-          }')">Resolved</button>
+          }')">Resolve</button>
         </div>
       </div>`;
       })
@@ -1401,13 +1420,36 @@ class SmartParkAdmin {
       );
       if (!this._resolvedReports) this._resolvedReports = new Set();
       this._resolvedReports.add(String(id));
+      localStorage.setItem(
+        "alertsResolvedIds",
+        JSON.stringify(Array.from(this._resolvedReports))
+      );
       // Update in-memory alert status if present
       (this.alerts || []).forEach((a) => {
         if (String(a.id) === String(id)) a.status = "resolved";
       });
     } catch (_) {}
 
-    // Re-render list and update badge count immediately
+    // Move resolved items to the bottom and re-render
+    try {
+      const toDate = (d) => {
+        try {
+          return new Date(d).getTime();
+        } catch (_) {
+          return 0;
+        }
+      };
+      const isResolved = (a) =>
+        String(a.status) === "resolved" ||
+        (this._resolvedReports && this._resolvedReports.has(String(a.id)));
+      this.alerts = (this.alerts || []).slice().sort((a, b) => {
+        const ar = isResolved(a);
+        const br = isResolved(b);
+        if (ar !== br) return ar ? 1 : -1; // unresolved first, resolved bottom
+        return toDate(b.created_at) - toDate(a.created_at); // newest first within group
+      });
+    } catch (_) {}
+
     this.renderAlertsList(this.alerts || []);
     this.updateAlertsBadge();
 
@@ -5700,7 +5742,7 @@ class SmartParkAdmin {
               <div style="display:flex; gap:8px;">
                 <button class="btn btn-outline" data-action="resolve-report" data-report-id="${
                   r.id
-                }">Resolved</button>
+                }">Resolve</button>
               </div>
             </div>
           </div>`;
@@ -5832,10 +5874,13 @@ class SmartParkAdmin {
 
   updateAlertsBadge() {
     try {
-      // Count only unresolved alerts (not marked read/resolved)
-      const unresolved = (this.alerts || []).filter(
-        (a) => !this._readReports || !this._readReports.has(String(a.id))
-      );
+      // Count only unresolved alerts (exclude resolved by status or persisted set)
+      const unresolved = (this.alerts || []).filter((a) => {
+        const isResolvedStatus = String(a.status) === "resolved";
+        const isResolvedLocal =
+          this._resolvedReports && this._resolvedReports.has(String(a.id));
+        return !(isResolvedStatus || isResolvedLocal);
+      });
       const alertCount = unresolved.length;
       const navItem = document.querySelector(
         '.nav-item[data-section="alerts"]'
@@ -7132,7 +7177,10 @@ class SmartParkAdmin {
     // Calculate most booked slot
     const slotBookings = {};
     bookings.forEach((booking) => {
-      const slotNumber = booking.parking_spot?.spot_number || "Unknown";
+      const slotNumber =
+        (booking.parking_spot && booking.parking_spot.spot_number) ||
+        booking.slot ||
+        "Unknown";
       slotBookings[slotNumber] = (slotBookings[slotNumber] || 0) + 1;
     });
 
