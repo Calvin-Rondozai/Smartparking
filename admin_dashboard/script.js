@@ -1169,32 +1169,32 @@ class SmartParkAdmin {
     const url = `${this.apiBaseUrl}/admin/user-reports/`;
     console.log("Fallback fetching alerts from:", url);
     try {
-      const resp = await fetch(url, {
+    const resp = await fetch(url, {
         headers: {
           Authorization: `Token ${this.token}`,
           "Content-Type": "application/json",
         },
-        cache: "no-store",
-      });
+      cache: "no-store",
+    });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      const list = Array.isArray(data)
-        ? data
-        : data.reports || data.results || [];
+    const data = await resp.json();
+    const list = Array.isArray(data)
+      ? data
+      : data.reports || data.results || [];
       // Normalize to stable IDs so read/resolved state persists across refreshes
-      this.alerts = (list || []).map((a, idx) => ({
+    this.alerts = (list || []).map((a, idx) => ({
         id:
           a && a.id !== undefined && a.id !== null
             ? `report_${a.id}`
             : `report_${idx}`,
         type: a.type || "user_report",
         title: a.title || "User Report",
-        message: a.message || a.detail || a.description || "",
-        created_at: a.created_at || a.timestamp || new Date().toISOString(),
+      message: a.message || a.detail || a.description || "",
+      created_at: a.created_at || a.timestamp || new Date().toISOString(),
         priority: a.priority || "medium",
         user: a.user || null,
         status: a.status || "pending",
-      }));
+    }));
     } catch (e) {
       console.log("Fallback alerts fetch failed:", e);
       this.alerts = this.alerts || [];
@@ -1241,8 +1241,8 @@ class SmartParkAdmin {
         `${this.apiBaseUrl}/admin/alerts/unbooked-occupied/`,
         {
           headers: {
-            Authorization: `Token ${this.token}`,
-            "Content-Type": "application/json",
+              Authorization: `Token ${this.token}`,
+              "Content-Type": "application/json",
           },
         }
       );
@@ -1309,12 +1309,12 @@ class SmartParkAdmin {
 
     // Sort alerts by date and limit to 50
     this.alerts = alerts
-      .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
-      .slice(0, 50);
+          .sort((x, y) => new Date(y.created_at) - new Date(x.created_at))
+          .slice(0, 50);
 
-    console.log("Final alerts:", this.alerts);
-    this.updateAlerts(this.alerts);
-    this.renderAlertsList(this.alerts);
+        console.log("Final alerts:", this.alerts);
+        this.updateAlerts(this.alerts);
+        this.renderAlertsList(this.alerts);
 
     try {
       this.updateAlertsBadge();
@@ -2743,10 +2743,10 @@ class SmartParkAdmin {
 
       // Use the same endpoint as mobile app
       const response = await fetch(`${this.iotApiUrl}/parking/availability/`, {
-        headers: {
-          Authorization: `Token ${this.token}`,
-          "Content-Type": "application/json",
-        },
+          headers: {
+            Authorization: `Token ${this.token}`,
+            "Content-Type": "application/json",
+          },
       });
 
       if (!response.ok) {
@@ -4784,38 +4784,34 @@ class SmartParkAdmin {
     }
 
     const tableHTML = `
-      <table class="data-table">
+      <table class="data-table" style="width:100%;table-layout:fixed;border-collapse:collapse;">
         <thead>
-          <tr>
-            <th>User ID</th>
-            <th>Username</th>
-            <th>Email</th>
-            <th>Balance</th>
-            <th>Last Login</th>
-            <th>Actions</th>
+          <tr style="background:var(--light-gray);border-bottom:2px solid #bbb;">
+            <th style="padding:12px;text-align:left;">User ID</th>
+            <th style="padding:12px;text-align:left;">Username</th>
+            <th style="padding:12px;text-align:left;">Email</th>
+            <th style="padding:12px;text-align:left;">Balance</th>
+            <th style="padding:12px;text-align:left;">Last Login</th>
+            <th style="padding:12px;text-align:left;">Actions</th>
           </tr>
         </thead>
         <tbody>
           ${users
             .map(
               (user) => `
-            <tr>
-              <td>${user.id}</td>
-              <td>${user.username || "N/A"}</td>
-              <td>${user.email || "N/A"}</td>
-              <td>
-                <span style="color: #F44336; font-weight: bold;">
-                  $${parseFloat(
+            <tr style="border-bottom:1px solid #eee;">
+              <td style="padding:12px;">${user.id}</td>
+              <td style="padding:12px;">${user.username || "N/A"}</td>
+              <td style="padding:12px;">${user.email || "N/A"}</td>
+              <td style="padding:12px;"><span style="color:#F44336;font-weight:bold;">$${parseFloat(
                     user.balance || user.profile?.balance || 0
-                  ).toFixed(2)}
-                </span>
-              </td>
-              <td>${
+              ).toFixed(2)}</span></td>
+              <td style="padding:12px;">${
                 user.last_login
                   ? new Date(user.last_login).toLocaleDateString()
                   : "Never"
               }</td>
-              <td>
+              <td style="padding:12px;">
                 <button class="btn btn-sm btn-outline" onclick="dashboard.viewUserDetails(${
                   user.id
                 })">
@@ -4829,8 +4825,84 @@ class SmartParkAdmin {
         </tbody>
       </table>
     `;
-
     container.innerHTML = tableHTML;
+  }
+
+  showUserDetailsModal(user) {
+    // Always attempt to show booking count and total spent from user object if present
+    let bookingStatsHtml = "";
+    if (user.booking_count !== undefined && user.total_spent !== undefined) {
+      bookingStatsHtml = `
+        <div style='margin:9px 0 8px 0;font-size:15px;'>
+          <strong>Total Bookings:</strong> ${user.booking_count}
+          <br><strong>Total Spent:</strong> $${parseFloat(
+            user.total_spent
+          ).toFixed(2)}
+        </div>
+      `;
+    }
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-content" style="padding:30px;background:#fff;border-radius:14px;max-width:430px;width:93vw;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+          <h3 style="margin:0;">User Details</h3>
+          <button onclick="this.closest('.modal-overlay').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--gray);">×</button>
+        </div>
+        <div style="margin-bottom:4px;"><strong>ID:</strong> ${user.id}</div>
+        <div style="margin-bottom:4px;"><strong>Username:</strong> ${
+          user.username
+        }</div>
+        <div style="margin-bottom:4px;"><strong>Email:</strong> ${
+          user.email
+        }</div>
+        <div style="margin-bottom:4px;"><strong>Balance:</strong> <span style="color:#F44336;font-weight:bold;">$${parseFloat(
+          user.balance || 0
+        ).toFixed(2)}</span></div>
+        <div style="margin-bottom:4px;"><strong>Last Login:</strong> ${
+          user.last_login ? new Date(user.last_login).toLocaleString() : "Never"
+        }</div>
+        ${
+          bookingStatsHtml ||
+          `<div id="userExtraStats" style='margin-top:9px;color:#444;font-size:15px;'>Loading booking stats...</div>`
+        }
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // If not in user, fetch and update
+    if (
+      !(user.booking_count !== undefined && user.total_spent !== undefined) &&
+      user.username
+    ) {
+      const statsDiv = modal.querySelector("#userExtraStats");
+      if (statsDiv) {
+        fetch(
+          `${this.apiBaseUrl}/admin/bookings/?search=${encodeURIComponent(
+            user.username
+          )}`,
+          { headers: { Authorization: `Token ${this.token}` } }
+        )
+          .then((resp) => (resp.ok ? resp.json() : Promise.reject()))
+          .then((data) => {
+            const bookings = data.bookings || [];
+            const total = bookings.length;
+            const spent = bookings.reduce((sum, b) => {
+              const amt =
+                b.amount !== undefined && b.amount !== null
+                  ? parseFloat(b.amount)
+                  : parseFloat(b.total_cost || 0);
+              return sum + (isNaN(amt) ? 0 : amt);
+            }, 0);
+            statsDiv.innerHTML = `<strong>Total Bookings:</strong> ${total}<br><strong>Total Spent:</strong> $${spent.toFixed(
+              2
+            )}`;
+          })
+          .catch(() => {
+            statsDiv.innerHTML = `<span style='color:#B71C1C;'>Failed to load booking stats.</span>`;
+          });
+      }
+    }
   }
 
   viewUserDetails(userId) {
@@ -4841,86 +4913,6 @@ class SmartParkAdmin {
     } else {
       this.showNotification("User details not available", "error");
     }
-  }
-
-  showUserDetailsModal(user) {
-    const modal = document.createElement("div");
-    modal.className = "modal-overlay";
-    modal.innerHTML = `
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>User Details</h3>
-          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="user-details">
-            <div class="detail-row">
-              <label>User ID:</label>
-              <span>${user.id}</span>
-            </div>
-            <div class="detail-row">
-              <label>Username:</label>
-              <span>${user.username || "N/A"}</span>
-            </div>
-            <div class="detail-row">
-              <label>Email:</label>
-              <span>${user.email || "N/A"}</span>
-            </div>
-            <div class="detail-row">
-              <label>Balance:</label>
-              <span style="color: ${
-                parseFloat(user.balance || user.profile?.balance || 0) < 0
-                  ? "#F44336"
-                  : "#4CAF50"
-              }; font-weight: bold;">
-                $${parseFloat(
-                  user.balance || user.profile?.balance || 0
-                ).toFixed(2)}
-              </span>
-            </div>
-            <div class="detail-row">
-              <label>First Name:</label>
-              <span>${user.first_name || "N/A"}</span>
-            </div>
-            <div class="detail-row">
-              <label>Last Name:</label>
-              <span>${user.last_name || "N/A"}</span>
-            </div>
-            <div class="detail-row">
-              <label>Date Joined:</label>
-              <span>${
-                user.date_joined
-                  ? new Date(user.date_joined).toLocaleDateString()
-                  : "N/A"
-              }</span>
-            </div>
-            <div class="detail-row">
-              <label>Last Login:</label>
-              <span>${
-                user.last_login
-                  ? new Date(user.last_login).toLocaleDateString()
-                  : "Never"
-              }</span>
-            </div>
-            <div class="detail-row">
-              <label>Is Active:</label>
-              <span style="color: ${user.is_active ? "#4CAF50" : "#F44336"}">
-                ${user.is_active ? "Yes" : "No"}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
-            Close
-          </button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
   }
 
   async loadUsersData() {
@@ -5564,7 +5556,7 @@ class SmartParkAdmin {
           }
         } else {
           // Fallback to refetch all users if needed
-          await this.loadUsersData();
+        await this.loadUsersData();
         }
         return true;
       } else {
@@ -5969,7 +5961,6 @@ class SmartParkAdmin {
     console.log("Loading settings data...");
     // Implementation for settings section
   }
-
   async restartDevice(deviceId) {
     if (
       !confirm(
@@ -6000,209 +5991,6 @@ class SmartParkAdmin {
         const error = await response.json();
         this.showNotification(
           error.error || `Failed to restart device ${deviceId}`,
-          "error"
-        );
-      }
-    } catch (error) {
-      console.error("Error restarting device:", error);
-      this.showNotification("Network error. Please try again.", "error");
-    }
-  }
-  async viewDeviceDetails(deviceId) {
-    const device = this.deviceDetails?.devices?.find((d) => d.id === deviceId);
-    if (!device) return;
-
-    const modal = document.createElement("div");
-    modal.className = "modal-overlay";
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-    `;
-
-    modal.innerHTML = `
-      <div class="modal-content" style="background: white; padding: 32px; border-radius: 12px; min-width: 600px; max-width: 800px; max-height: 90vh; overflow-y: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-          <h3 style="margin: 0; color: var(--black);">${
-            device.name
-          } - Detailed Information</h3>
-          <button onclick="this.closest('.modal-overlay').remove()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--gray);">×</button>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-          <div>
-            <h4 style="margin: 0 0 16px 0; color: var(--dark-gray);">Device Information</h4>
-            <div style="background: var(--light-gray); padding: 16px; border-radius: 8px;">
-              <div style="margin-bottom: 12px;">
-                <strong>Device ID:</strong><br>
-                <span style="font-family: monospace; color: var(--dark-gray);">${
-                  device.id
-                }</span>
-              </div>
-              <div style="margin-bottom: 12px;">
-                <strong>Type:</strong><br>
-                <span>${device.type}</span>
-              </div>
-              <div style="margin-bottom: 12px;">
-                <strong>Firmware Version:</strong><br>
-                <span>${device.firmware_version}</span>
-              </div>
-              <div style="margin-bottom: 12px;">
-                <strong>MAC Address:</strong><br>
-                <span style="font-family: monospace; color: var(--dark-gray);">${
-                  device.mac_address
-                }</span>
-              </div>
-              <div>
-                <strong>Status:</strong><br>
-                <span style="color: ${
-                  device.status === "online"
-                    ? "var(--success-green)"
-                    : "var(--red)"
-                }; font-weight: 600;">${device.status.toUpperCase()}</span>
-              </div>
-            </div>
-          </div>
-          
-          <div>
-            <h4 style="margin: 0 0 16px 0; color: var(--dark-gray);">Network Information</h4>
-            <div style="background: var(--light-gray); padding: 16px; border-radius: 8px;">
-              <div style="margin-bottom: 12px;">
-                <strong>IP Address:</strong><br>
-                <span style="font-family: monospace; color: var(--dark-gray);">${
-                  device.ip_address
-                }</span>
-              </div>
-              <div style="margin-bottom: 12px;">
-                <strong>WiFi Network:</strong><br>
-                <span>${device.wifi_ssid}</span>
-              </div>
-              <div style="margin-bottom: 12px;">
-                <strong>WiFi Strength:</strong><br>
-                <span style="color: ${
-                  device.wifi_strength > -50
-                    ? "var(--success-green)"
-                    : device.wifi_strength > -60
-                    ? "var(--primary-green)"
-                    : device.wifi_strength > -70
-                    ? "var(--orange)"
-                    : "var(--red)"
-                };">
-                  ${device.wifi_strength} dBm
-                </span>
-              </div>
-              <div>
-                <strong>Last Seen:</strong><br>
-                <span>${this.getTimeAgo(new Date(device.last_seen))} ago</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div style="margin-top: 24px;">
-          <h4 style="margin: 0 0 16px 0; color: var(--dark-gray);">System Status</h4>
-          <div style="background: var(--light-gray); padding: 16px; border-radius: 8px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-              <div>
-                <strong>Uptime:</strong><br>
-                <span>${this.formatUptime(device.uptime)}</span>
-              </div>
-              <div>
-                <strong>Temperature:</strong><br>
-                <span>${device.temperature}°C</span>
-              </div>
-              <div>
-                <strong>Memory:</strong><br>
-                <span>${this.formatBytes(
-                  device.memory_free
-                )} / ${this.formatBytes(device.memory_total)}</span>
-              </div>
-              <div>
-                <strong>CPU Frequency:</strong><br>
-                <span>${device.cpu_frequency} MHz</span>
-              </div>
-              <div>
-                <strong>Connected Sensors:</strong><br>
-                <span>${device.sensor_count}</span>
-              </div>
-              <div>
-                <strong>Last Restart:</strong><br>
-                <span>${this.getTimeAgo(
-                  new Date(device.last_restart)
-                )} ago</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div style="margin-top: 24px;">
-          <h4 style="margin: 0 0 16px 0; color: var(--dark-gray);">Connected Sensors</h4>
-          <div style="background: var(--light-gray); padding: 16px; border-radius: 8px;">
-            ${device.connected_sensors
-              .map(
-                (sensor) => `
-              <div style="padding: 8px; background: white; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid var(--primary-green);">
-                <i class="fas fa-sensor" style="color: var(--primary-green); margin-right: 8px;"></i>
-                ${sensor}
-              </div>
-            `
-              )
-              .join("")}
-          </div>
-        </div>
-        
-        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
-          <button onclick="dashboard.restartDevice('${
-            device.id
-          }'); this.closest('.modal-overlay').remove();" class="btn btn-outline" style="color: var(--orange); border-color: var(--orange);">
-            <i class="fas fa-redo"></i> Restart Device
-          </button>
-          <button onclick="this.closest('.modal-overlay').remove()" class="btn btn-secondary">Close</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-  }
-
-  async restartDevice(deviceId) {
-    if (
-      !confirm(
-        `Are you sure you want to restart device ${deviceId}? This will temporarily disconnect the device.`
-      )
-    ) {
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `${this.iotApiUrl}/devices/${deviceId}/restart/`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        this.showNotification(
-          "Device restart command sent successfully",
-          "success"
-        );
-        // Refresh devices data after a delay
-        setTimeout(() => this.loadDevicesData(), 3000);
-      } else {
-        const error = await response.json();
-        this.showNotification(
-          error.error || "Failed to restart device",
           "error"
         );
       }
@@ -6727,7 +6515,6 @@ class SmartParkAdmin {
       this.showNotification("Failed to load reports data", "error");
     }
   }
-
   async loadMetricsData() {
     try {
       // Fetch all data from backend (no filtering)
@@ -6960,7 +6747,6 @@ class SmartParkAdmin {
       },
     });
   }
-
   initSlotUtilizationChart(statsData) {
     const ctx = document.getElementById("slotUtilizationChart");
     if (!ctx) return;
@@ -7528,7 +7314,6 @@ class SmartParkAdmin {
     }
     return data;
   }
-
   generateMockBookingData(days) {
     const data = [];
     for (let i = 0; i < days; i++) {
