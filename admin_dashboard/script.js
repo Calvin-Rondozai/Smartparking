@@ -5555,21 +5555,75 @@ class SmartParkAdmin {
           "Password reset successfully! User must clear app data or reinstall app to login with new password.",
           "success"
         );
-        // Refresh the users list to get updated data
-        await this.loadUsersData();
-        return true; // Return success
+        // Refresh that one user row and details immediately
+        const updatedUser = await this.fetchUserById(userId);
+        if (updatedUser) {
+          this._replaceUserInList(updatedUser);
+          if (this.currentlyViewedUserId === userId) {
+            this.viewUserDetails(updatedUser);
+          }
+        } else {
+          // Fallback to refetch all users if needed
+          await this.loadUsersData();
+        }
+        return true;
       } else {
         const error = await response.json();
         this.showNotification(
           error.error || "Failed to reset password",
           "error"
         );
-        return false; // Return failure
+        return false;
       }
     } catch (error) {
       console.error("Error resetting password:", error);
       this.showNotification("Network error. Please try again.", "error");
-      return false; // Return failure
+      return false;
+    }
+  }
+
+  // Fetches one user from backend by ID
+  async fetchUserById(userId) {
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/admin/users/`);
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (!data.success || !data.users) return null;
+      return data.users.find((u) => String(u.id) === String(userId));
+    } catch {
+      return null;
+    }
+  }
+
+  // Replaces a user in the cached list and if displayed, updates UI
+  _replaceUserInList(user) {
+    if (!user || !this.allUsers) return;
+    const idx = this.allUsers.findIndex((u) => u.id === user.id);
+    if (idx !== -1) {
+      this.allUsers[idx] = user;
+      // Optionally, rerender users table/list if that's how your UI works
+      this.renderUsersTable && this.renderUsersTable(this.allUsers);
+    }
+  }
+
+  // When editing user and submitting, after success, fetch that user again and update UI
+  async handleEditUserSubmit(event, userId) {
+    event.preventDefault();
+    const userData = this.collectEditUserFormData(); // (existing logic)
+    try {
+      await this.updateUser(userId, userData);
+      // If password was changed, refresh fetch user and update UI
+      if (userData.password) {
+        const updatedUser = await this.fetchUserById(userId);
+        if (updatedUser) {
+          this._replaceUserInList(updatedUser);
+          this.viewUserDetails(updatedUser);
+        }
+      }
+      this.closeModal();
+    } catch (error) {
+      console.error("Error updating user:", error);
+      this.showNotification("Error updating user", "error");
     }
   }
 
@@ -6640,6 +6694,14 @@ class SmartParkAdmin {
 
     try {
       await this.updateUser(userId, userData);
+      // If password was changed, refresh fetch user and update UI
+      if (userData.password) {
+        const updatedUser = await this.fetchUserById(userId);
+        if (updatedUser) {
+          this._replaceUserInList(updatedUser);
+          this.viewUserDetails(updatedUser);
+        }
+      }
       this.closeModal();
     } catch (error) {
       console.error("Error updating user:", error);
