@@ -4851,7 +4851,7 @@ class SmartParkAdmin {
         </div>
         <div style="margin-bottom:4px;"><strong>ID:</strong> ${user.id}</div>
         <div style="margin-bottom:4px;"><strong>Username:</strong> ${
-          user.username
+          user.username || "N/A"
         }</div>
         <div style="margin-bottom:4px;"><strong>Email:</strong> ${
           user.email
@@ -5390,7 +5390,6 @@ class SmartParkAdmin {
 
     document.body.appendChild(modal);
   }
-
   async toggleUserStatus(userId, currentStatus) {
     const action = currentStatus ? "deactivate" : "activate";
     if (!confirm(`Are you sure you want to ${action} this user?`)) {
@@ -6912,7 +6911,6 @@ class SmartParkAdmin {
       return [];
     }
   }
-
   async fetchBookingsForPeriod(period) {
     try {
       console.log("Fetching bookings for period:", period);

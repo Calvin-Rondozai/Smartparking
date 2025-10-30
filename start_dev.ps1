@@ -1,4 +1,4 @@
-t<#
+<#
 SmartParking Dev Starter (Windows PowerShell)
 What it does:
 - Starts Django backend on http://localhost:8000 (in a new window)
@@ -45,10 +45,9 @@ Write-Host "===========================================================" -Foregr
 
 Start-Backend
 
-Write-Host "\nTip: If login page can't reach the backend, run this once in DevTools:" -ForegroundColor Yellow
+Write-Host "`nTip: If login page can't reach the backend, run this once in DevTools:" -ForegroundColor Yellow
 Write-Host "localStorage.setItem('backendOrigin', 'http://localhost:8000');" -ForegroundColor Yellow
 
 Start-AdminDashboard
 
-Write-Host "\nExited admin dashboard server." -ForegroundColor DarkGray
-
+Write-Host "`nExited admin dashboard server." -ForegroundColor DarkGray
