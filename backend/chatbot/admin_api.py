@@ -246,7 +246,33 @@ def admin_users_update(request, user_id):
                 pass
         profile.save()
 
-        return JsonResponse({"success": True})
+        # Return updated user payload so clients can refresh UI without extra fetch
+        updated = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "is_active": user.is_active,
+            "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
+            "date_joined": user.date_joined.isoformat() if user.date_joined else None,
+        }
+        # Attach profile fields if available
+        try:
+            updated.update(
+                {
+                    "balance": float(profile.balance),
+                    "phone": profile.phone,
+                    "address": profile.address,
+                    "license_number": profile.license_number,
+                    "number_plate": profile.number_plate,
+                }
+            )
+        except Exception:
+            pass
+
+        return JsonResponse({"success": True, "user": updated})
     except User.DoesNotExist:
         return JsonResponse({"success": False, "error": "User not found"}, status=404)
     except json.JSONDecodeError:

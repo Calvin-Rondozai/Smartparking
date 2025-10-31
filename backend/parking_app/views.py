@@ -5248,43 +5248,88 @@ def detect_car_parked(request, booking_id):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def reset_password(request):
-    """Reset password by verifying full name and email, then setting new password"""
+    """Reset password.
+    Supports two flows:
+    1) Legacy: verify full_name + email + new_password
+    2) Mobile: verify license_number + number_plate + note + new_password
+    """
     try:
-        full_name = request.data.get("full_name", "").strip()
-        email = request.data.get("email", "").strip()
-        new_password = request.data.get("new_password", "")
-
-        # Validate required fields
-        if not all([full_name, email, new_password]):
-            return Response(
-                {"error": "Full name, email, and new password are required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Validate password length
+        new_password = (request.data.get("new_password") or "").strip()
         if len(new_password) < 6:
             return Response(
                 {"error": "Password must be at least 6 characters long"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Validate email format
+        # Mobile flow: license_number + number_plate (+ optional note)
+        license_number = (request.data.get("license_number") or "").strip()
+        number_plate = (request.data.get("number_plate") or "").strip()
+        note = (request.data.get("note") or "").strip()
+
+        if license_number and number_plate:
+            try:
+                profile = UserProfile.objects.get(
+                    license_number__iexact=license_number,
+                    number_plate__iexact=number_plate,
+                )
+                user = profile.user
+            except UserProfile.DoesNotExist:
+                return Response(
+                    {"error": "No user found matching license number and number plate"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Update password
+            user.password = make_password(new_password)
+            user.save()
+
+            # Persist note as a user report for audit (optional)
+            try:
+                if note:
+                    UserReport.objects.create(
+                        user=user,
+                        message=f"Password reset request: {note}",
+                        type="password_reset",
+                        priority="medium",
+                        status="resolved",
+                    )
+            except Exception:
+                pass
+
+            return Response(
+                {
+                    "message": "Password reset successful.",
+                    "user_id": user.id,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Legacy flow: full_name + email
+        full_name = (request.data.get("full_name") or "").strip()
+        email = (request.data.get("email") or "").strip()
+
+        if not all([full_name, email]):
+            return Response(
+                {
+                    "error": "Provide license_number and number_plate, or full_name and email",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if "@" not in email or "." not in email:
             return Response(
                 {"error": "Please enter a valid email address"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Find user by email
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
             return Response(
                 {"error": "No user found with this email address"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Verify full name matches
         user_full_name = f"{user.first_name} {user.last_name}".strip()
         if user_full_name.lower() != full_name.lower():
             return Response(
@@ -5292,13 +5337,12 @@ def reset_password(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Update password
         user.password = make_password(new_password)
         user.save()
 
         return Response(
             {
-                "message": "Password reset successful. You can now sign in with your new password.",
+                "message": "Password reset successful.",
                 "user_id": user.id,
             },
             status=status.HTTP_200_OK,

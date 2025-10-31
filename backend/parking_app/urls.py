@@ -11,6 +11,8 @@ urlpatterns = [
     path("auth/profile/update/", views.update_user_profile, name="update_profile"),
     path("auth/change-password/", views.change_password, name="change_password"),
     path("auth/reset-password/", views.reset_password, name="reset_password"),
+    # Mobile alias (some clients call forgot-password)
+    path("auth/forgot-password/", views.reset_password, name="forgot_password"),
     # Parking lot endpoints
     path("parking-lots/", views.ParkingLotList.as_view(), name="parking_lot_list"),
     path(
