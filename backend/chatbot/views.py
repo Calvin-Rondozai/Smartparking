@@ -503,10 +503,9 @@ def twilio_whatsapp_webhook(request):
             return val(*args)
         return val or key
 
-        def reply_text(text: str) -> HttpResponse:
-            resp = MessagingResponse()
-            resp.message(text)
-
+    def reply_text(text: str) -> HttpResponse:
+        resp = MessagingResponse()
+        resp.message(text)
         logger.info(f"📤 Replying with: {text[:100]}")
         return HttpResponse(str(resp), content_type="application/xml")
 
@@ -515,8 +514,8 @@ def twilio_whatsapp_webhook(request):
         resp = MessagingResponse()
         for msg in messages:
             resp.message(msg)
-            logger.info(f"📤 Replying with: {msg[:100]}")
-            return HttpResponse(str(resp), content_type="application/xml")
+        logger.info(f"📤 Replying with: {messages[0][:100] if messages else ''}")
+        return HttpResponse(str(resp), content_type="application/xml")
 
     # Intent parsing helpers
     def normalize(s):
@@ -1097,8 +1096,22 @@ def twilio_whatsapp_webhook(request):
             if len(body) < 10:
                 return reply_text(t("report_too_short"))
 
-            # Store report (you can add logic to save to database if needed)
-            request.session["whatsapp_flow"] = "idle"
+            # Persist report to database so it shows on admin dashboard alerts
+            try:
+                from parking_app.models import UserReport
+
+                user = get_user()  # may be guest if not authenticated
+                UserReport.objects.create(
+                    user=user if user and getattr(user, "id", None) else None,
+                    message=body,
+                    type="user_report",
+                    priority="medium",
+                    status="pending",
+                )
+            except Exception as e:
+                logger.error(f"Failed to save UserReport: {e}")
+            finally:
+                request.session["whatsapp_flow"] = "idle"
             return reply_text(t("report_sent"))
 
         # Slot availability check - require authentication
