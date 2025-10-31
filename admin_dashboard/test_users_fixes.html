@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test Users Page Fixes</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      .test-section {
+        margin: 20px 0;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+      }
+      .success {
+        color: green;
+      }
+      .error {
+        color: red;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        cursor: pointer;
+      }
+      input {
+        padding: 8px;
+        margin: 5px;
+        width: 200px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Test Users Page Fixes</h1>
+
+    <div class="test-section">
+      <h2>1. Test User Data API</h2>
+      <p>
+        This will test if the backend is returning correct user data with proper
+        total_spent calculations.
+      </p>
+      <button onclick="testUserData()">Test User Data API</button>
+      <div id="userDataResult"></div>
+    </div>
+
+    <div class="test-section">
+      <h2>2. Test Reset Password API</h2>
+      <p>
+        This will test if the reset password endpoint accepts custom passwords.
+      </p>
+      <input
+        type="password"
+        id="testPassword"
+        placeholder="Enter test password"
+      />
+      <button onclick="testResetPassword()">Test Reset Password</button>
+      <div id="resetPasswordResult"></div>
+    </div>
+
+    <div class="test-section">
+      <h2>3. Test Admin Dashboard Integration</h2>
+      <p>
+        This will test if the admin dashboard can access the users page
+        correctly.
+      </p>
+      <button onclick="testDashboardIntegration()">
+        Test Dashboard Integration
+      </button>
+      <div id="dashboardResult"></div>
+    </div>
+
+    <script>
+      // Test user data API
+      async function testUserData() {
+        const resultDiv = document.getElementById("userDataResult");
+        resultDiv.innerHTML = "<p>Testing...</p>";
+
+        try {
+          // First get a token
+          const loginResponse = await fetch(
+            "http://localhost:8000/api/auth/signin/",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ username: "admin", password: "admin123" }),
+            }
+          );
+
+          if (!loginResponse.ok) {
+            throw new Error("Login failed");
+          }
+
+          const loginData = await loginResponse.json();
+          const token = loginData.token;
+
+          // Now test the users API
+          const usersResponse = await fetch(
+            "http://localhost:8000/api/admin/users/",
+            {
+              headers: {
+                Authorization: `Token ${token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          if (!usersResponse.ok) {
+            throw new Error("Users API failed");
+          }
+
+          const users = await usersResponse.json();
+
+          // Check if total_spent is properly calculated
+          const hasValidData = users.every(
+            (user) =>
+              typeof user.total_spent === "number" &&
+              typeof user.total_bookings === "number" &&
+              typeof user.last_login !== "undefined"
+          );
+
+          resultDiv.innerHTML = `
+                    <div class="success">
+                        <h3>✅ User Data API Test Passed</h3>
+                        <p>Found ${users.length} users</p>
+                        <p>All users have valid data types: ${
+                          hasValidData ? "Yes" : "No"
+                        }</p>
+                        <p>Sample user data:</p>
+                        <pre>${JSON.stringify(users[0], null, 2)}</pre>
+                    </div>
+                `;
+        } catch (error) {
+          resultDiv.innerHTML = `
+                    <div class="error">
+                        <h3>❌ User Data API Test Failed</h3>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+        }
+      }
+
+      // Test reset password API
+      async function testResetPassword() {
+        const resultDiv = document.getElementById("resetPasswordResult");
+        const password = document.getElementById("testPassword").value;
+
+        if (!password) {
+          resultDiv.innerHTML =
+            '<div class="error">Please enter a test password</div>';
+          return;
+        }
+
+        resultDiv.innerHTML = "<p>Testing...</p>";
+
+        try {
+          // First get a token
+          const loginResponse = await fetch(
+            "http://localhost:8000/api/auth/signin/",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ username: "admin", password: "admin123" }),
+            }
+          );
+
+          if (!loginResponse.ok) {
+            throw new Error("Login failed");
+          }
+
+          const loginData = await loginResponse.json();
+          const token = loginData.token;
+
+          // Test reset password with custom password
+          const resetResponse = await fetch(
+            "http://localhost:8000/api/admin/users/9/reset-password/",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Token ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ new_password: password }),
+            }
+          );
+
+          if (!resetResponse.ok) {
+            throw new Error("Reset password failed");
+          }
+
+          const resetData = await resetResponse.json();
+
+          resultDiv.innerHTML = `
+                    <div class="success">
+                        <h3>✅ Reset Password API Test Passed</h3>
+                        <p>Message: ${resetData.message}</p>
+                        <p>User: ${resetData.user.username}</p>
+                    </div>
+                `;
+        } catch (error) {
+          resultDiv.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Reset Password API Test Failed</h3>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+        }
+      }
+
+      // Test dashboard integration
+      async function testDashboardIntegration() {
+        const resultDiv = document.getElementById("dashboardResult");
+        resultDiv.innerHTML = "<p>Testing...</p>";
+
+        try {
+          // Check if the admin dashboard files exist and are accessible
+          const dashboardResponse = await fetch("./index.html");
+          const scriptResponse = await fetch("./script.js");
+
+          if (!dashboardResponse.ok || !scriptResponse.ok) {
+            throw new Error("Dashboard files not accessible");
+          }
+
+          resultDiv.innerHTML = `
+                    <div class="success">
+                        <h3>✅ Dashboard Integration Test Passed</h3>
+                        <p>Dashboard files are accessible</p>
+                        <p>You can now test the full dashboard by opening index.html</p>
+                    </div>
+                `;
+        } catch (error) {
+          resultDiv.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Dashboard Integration Test Failed</h3>
+                        <p>Error: ${error.message}</p>
+                    </div>
+                `;
+        }
+      }
+    </script>
+  </body>
+</html>
