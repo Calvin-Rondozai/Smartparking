@@ -51,15 +51,15 @@
       const username = (usernameEl?.value || "").trim();
       const password = passwordEl?.value || ""; // preserve spaces
 
-    if (!username || !password) {
+      if (!username || !password) {
         showError("Please enter username and password");
-      return;
-    }
+        return;
+      }
 
-    try {
+      try {
         // Try primary admin-login endpoint first
         let resp = await fetch(PRIMARY_LOGIN, {
-        method: "POST",
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username, password }),
         });

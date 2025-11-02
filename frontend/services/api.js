@@ -9,7 +9,7 @@ const fallbackStorage = {
 
 // Base API URL
 // Base API URL - Use your computer's IP address for React Native
-export const API_BASE_URL = "http://169.254.156.223:8000/api"; // Local development
+export const API_BASE_URL = "http://10.147.17.47:8000/api"; // Local development
 // const API_BASE_URL = "http://localhost:8000/api"; // For local testing
 // const API_BASE_URL = "http://10.200.27.32:8000/api"; // For Android emulator (Wi-Fi)
 // const API_BASE_URL = "http://192.168.137.1:8000/api"; // For Android emulator (Hotspot)
@@ -138,18 +138,26 @@ export const authAPI = {
 
   // Sign in
   signin: async (credentials) => {
-    const response = await api.post("/auth/signin/", credentials);
-    const data = response.data;
+    console.log("Login request payload:", credentials); // Log credentials sent to backend
 
-    if (data.token) {
-      await AsyncStorage.setItem("authToken", data.token);
-      await AsyncStorage.setItem("userData", JSON.stringify(data.user));
-      fallbackStorage.authToken = data.token;
-      fallbackStorage.userData = data.user;
-      console.log("[API] Auth token saved successfully");
+    try {
+      const response = await api.post("/auth/signin/", credentials);
+      const data = response.data;
+      console.log("Login response from backend:", data); // Log backend response
+
+      if (data.token) {
+        await AsyncStorage.setItem("authToken", data.token);
+        await AsyncStorage.setItem("userData", JSON.stringify(data.user));
+        fallbackStorage.authToken = data.token;
+        fallbackStorage.userData = data.user;
+        console.log("[API] Auth token saved successfully");
+      }
+
+      return data;
+    } catch (error) {
+      console.error("Login error:", error.response?.data || error.message);
+      throw error;
     }
-
-    return data;
   },
 
   // Sign out

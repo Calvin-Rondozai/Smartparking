@@ -138,6 +138,10 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
+    console.log("[Login Attempt]");
+    console.log("Username:", trimmedUsername);
+    console.log("Password:", password);
+
     setLoading(true);
     try {
       const response = await authAPI.signin({

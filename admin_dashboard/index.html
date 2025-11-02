@@ -11,6 +11,41 @@
     />
   </head>
   <body>
+    <!-- Immediate authentication check - redirect to login if not authenticated -->
+    <script>
+      (function () {
+        // Check for admin token and user data
+        const token = localStorage.getItem("adminToken");
+        const user = localStorage.getItem("adminUser");
+
+        // If no token or user, redirect to login page immediately
+        if (!token || !user) {
+          console.log(
+            "[Auth] No authentication found, redirecting to login.html"
+          );
+          window.location.href = "login.html";
+          return;
+        }
+
+        // Try to parse user data
+        try {
+          const userData = JSON.parse(user);
+          if (!userData || !userData.username) {
+            console.log("[Auth] Invalid user data, redirecting to login.html");
+            window.location.href = "login.html";
+            return;
+          }
+        } catch (e) {
+          console.log(
+            "[Auth] Error parsing user data, redirecting to login.html"
+          );
+          window.location.href = "login.html";
+          return;
+        }
+
+        console.log("[Auth] Authentication check passed, loading dashboard");
+      })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <!-- Mobile Navigation Toggle -->
     <button class="mobile-nav-toggle" id="mobileNavToggle">
