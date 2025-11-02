@@ -831,6 +831,25 @@ def detect_car_parked(request, booking_id):
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
 
+                # Send WhatsApp notification when car parks
+                try:
+                    from chatbot.views import send_whatsapp_message
+                    from parking_app.models import UserProfile
+
+                    profile = UserProfile.objects.filter(user=booking.user).first()
+                    if profile and profile.phone:
+                        slot_name = booking.parking_spot.spot_number
+                        message = (
+                            f"✅ Car parked successfully!\n\n"
+                            f"📍 Slot: {slot_name}\n"
+                            f"⏰ Timer started - You'll be charged $1 per 30 seconds.\n"
+                            f"🔴 Red light indicates your slot is occupied.\n\n"
+                            f"Thank you for using Smart Parking! 🚗"
+                        )
+                        send_whatsapp_message(profile.phone, message)
+                except Exception as e:
+                    print(f"⚠️ Failed to send WhatsApp notification: {e}")
+
                 return Response(
                     {
                         "message": "Car detected! Timer started.",
@@ -2270,6 +2289,29 @@ def complete_active_booking(request, booking_id):
             trigger_esp32_booking_led(booking.parking_spot.spot_number, False)
         except Exception:
             pass
+
+        # Send WhatsApp notification when car leaves
+        try:
+            from chatbot.views import send_whatsapp_message
+            from parking_app.models import UserProfile
+
+            profile = UserProfile.objects.filter(user=request.user).first()
+            if profile and profile.phone:
+                slot_name = booking.parking_spot.spot_number
+                duration_minutes = elapsed_seconds // 60
+                duration_seconds = elapsed_seconds % 60
+                message = (
+                    f"🚗 You left the slot!\n\n"
+                    f"📍 Slot: {slot_name}\n"
+                    f"⏱️ Duration: {duration_minutes}m {duration_seconds}s\n"
+                    f"💰 Amount charged: ${float(CURRENT_BOOKING_TOTAL_COST or final_cost):.2f}\n"
+                    f"💳 Balance: ${float(current_balance):.2f}\n\n"
+                    f"✅ Payment successful!\n"
+                    f"Thank you for using Smart Parking! 🚗"
+                )
+                send_whatsapp_message(profile.phone, message)
+        except Exception as e:
+            print(f"⚠️ Failed to send WhatsApp notification: {e}")
 
         return Response(
             {

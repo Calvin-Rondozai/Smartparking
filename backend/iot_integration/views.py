@@ -93,6 +93,28 @@ def _auto_complete_booking_for_slot(spot_number):
         except Exception as e:
             print(f"Error turning off LED: {e}")
 
+        # Send WhatsApp notification when IoT detects car left
+        try:
+            from chatbot.views import send_whatsapp_message
+            from parking_app.models import UserProfile
+
+            profile = UserProfile.objects.filter(user=booking.user).first()
+            if profile and profile.phone:
+                slot_name = booking.parking_spot.spot_number
+                duration_minutes = elapsed_seconds // 60
+                duration_seconds = elapsed_seconds % 60
+                message = (
+                    f"🚗 You left the slot!\n\n"
+                    f"📍 Slot: {slot_name}\n"
+                    f"⏱️ Duration: {duration_minutes}m {duration_seconds}s\n"
+                    f"💰 Amount charged: ${float(final_cost):.2f}\n\n"
+                    f"✅ Payment successful!\n"
+                    f"Thank you for using Smart Parking! 🚗"
+                )
+                send_whatsapp_message(profile.phone, message)
+        except Exception as e:
+            print(f"⚠️ Failed to send WhatsApp notification: {e}")
+
         print(
             f"✅ Booking {booking.id} completed - Duration: {elapsed_seconds}s, Cost: ${final_cost}"
         )

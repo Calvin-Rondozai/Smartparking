@@ -22,6 +22,59 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def send_whatsapp_message(to_phone, message):
+    """
+    Send a WhatsApp message programmatically using Twilio REST API.
+
+    Args:
+        to_phone: Recipient phone number (with country code, e.g., +1234567890)
+        message: Message text to send
+
+    Returns:
+        bool: True if message sent successfully, False otherwise
+    """
+    try:
+        from django.conf import settings
+        from twilio.rest import Client
+
+        # Get Twilio credentials from settings
+        account_sid = getattr(settings, "TWILIO_ACCOUNT_SID", None)
+        auth_token = getattr(settings, "TWILIO_AUTH_TOKEN", None)
+        from_number = getattr(settings, "TWILIO_WHATSAPP_NUMBER", "+14155238886")
+
+        if not account_sid or not auth_token:
+            logger.warning(
+                "Twilio credentials not configured - cannot send WhatsApp message"
+            )
+            return False
+
+        # Initialize Twilio client
+        client = Client(account_sid, auth_token)
+
+        # Format phone number for WhatsApp (add whatsapp: prefix)
+        if not to_phone.startswith("whatsapp:"):
+            if not to_phone.startswith("+"):
+                # Assume local number, try to add default country code
+                to_phone = f"+{to_phone}"
+            to_phone = f"whatsapp:{to_phone}"
+
+        # Send message
+        twilio_message = client.messages.create(
+            body=message,
+            from_=f"whatsapp:{from_number.replace('whatsapp:', '')}",
+            to=to_phone,
+        )
+
+        logger.info(
+            f"✅ WhatsApp message sent to {to_phone} - SID: {twilio_message.sid}"
+        )
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Failed to send WhatsApp message to {to_phone}: {e}")
+        return False
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def current_booking(request):
