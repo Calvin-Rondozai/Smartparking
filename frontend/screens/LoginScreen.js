@@ -187,6 +187,10 @@ const LoginScreen = ({ navigation }) => {
   };
 
   const handleForgotPassword = async () => {
+    // Clear any previous messages
+    setErrorMessage("");
+    setSuccessMessage("");
+
     if (!licenseNumber || !numberPlate || !newPassword) {
       setErrorMessage(
         "Please fill in license number, number plate, and new password"
@@ -210,17 +214,48 @@ const LoginScreen = ({ navigation }) => {
       setSuccessMessage(
         "Password reset successful! You can now login with your new password."
       );
-      setShowForgot(false);
-      setForgotUsername("");
-      setLicenseNumber("");
-      setNumberPlate("");
-      setNewPassword("");
+      setErrorMessage("");
+      // Clear form after success
+      setTimeout(() => {
+        setShowForgot(false);
+        setForgotUsername("");
+        setLicenseNumber("");
+        setNumberPlate("");
+        setNewPassword("");
+        setSuccessMessage("");
+      }, 3000);
     } catch (error) {
       console.error("Forgot password error:", error);
-      setErrorMessage(
-        error.response?.data?.error ||
-          "Failed to reset password. Please check your license number and number plate, or try the identity reset method below."
-      );
+
+      // Handle network errors
+      if (
+        error.code === "NETWORK_ERROR" ||
+        error.message === "Network Error" ||
+        !error.response
+      ) {
+        setErrorMessage(
+          "Network error: Unable to connect to server. Please check your internet connection and try again."
+        );
+      } else if (error.response?.status === 404) {
+        // User not found
+        setErrorMessage(
+          error.response?.data?.error ||
+            "No user found with matching license number and number plate. Please verify your information and try again."
+        );
+      } else if (error.response?.status === 400) {
+        // Validation error
+        setErrorMessage(
+          error.response?.data?.error ||
+            "Invalid input. Please check your license number, number plate, and password."
+        );
+      } else {
+        // Other errors
+        setErrorMessage(
+          error.response?.data?.error ||
+            "Failed to reset password. Please check your license number and number plate and try again."
+        );
+      }
+      setSuccessMessage("");
     } finally {
       setLoading(false);
     }
@@ -347,7 +382,11 @@ const LoginScreen = ({ navigation }) => {
 
                   <TouchableOpacity
                     style={styles.forgotPassword}
-                    onPress={() => setShowForgot(!showForgot)}
+                    onPress={() => {
+                      setShowForgot(!showForgot);
+                      setErrorMessage("");
+                      setSuccessMessage("");
+                    }}
                   >
                     <Text style={styles.forgotPasswordText}>
                       {showForgot ? "Hide Reset" : "Forgot Password?"}
@@ -367,7 +406,10 @@ const LoginScreen = ({ navigation }) => {
                         <TextInput
                           style={styles.textInput}
                           value={licenseNumber}
-                          onChangeText={setLicenseNumber}
+                          onChangeText={(text) => {
+                            setLicenseNumber(text);
+                            setErrorMessage("");
+                          }}
                           placeholder="Enter your license number"
                           placeholderTextColor="#9CA3AF"
                           autoCapitalize="characters"
@@ -382,7 +424,10 @@ const LoginScreen = ({ navigation }) => {
                         <TextInput
                           style={styles.textInput}
                           value={numberPlate}
-                          onChangeText={setNumberPlate}
+                          onChangeText={(text) => {
+                            setNumberPlate(text);
+                            setErrorMessage("");
+                          }}
                           placeholder="Enter your number plate (e.g., ABC-1234)"
                           placeholderTextColor="#9CA3AF"
                           autoCapitalize="characters"
@@ -397,7 +442,10 @@ const LoginScreen = ({ navigation }) => {
                         <TextInput
                           style={styles.textInput}
                           value={newPassword}
-                          onChangeText={setNewPassword}
+                          onChangeText={(text) => {
+                            setNewPassword(text);
+                            setErrorMessage("");
+                          }}
                           placeholder="Enter new password (min 6 characters)"
                           placeholderTextColor="#9CA3AF"
                           secureTextEntry

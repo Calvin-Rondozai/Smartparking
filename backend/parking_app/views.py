@@ -5312,6 +5312,127 @@ def reset_password(request):
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
+def forgot_password(request):
+    """Reset password by verifying license number and number plate, then setting new password"""
+    try:
+        license_number = request.data.get("license_number", "").strip()
+        number_plate = request.data.get("number_plate", "").strip()
+        new_password = request.data.get("new_password", "")
+
+        print(
+            f"[Forgot Password] Request received - License: {license_number[:3]}***, Plate: {number_plate[:3]}***"
+        )
+
+        # Validate required fields
+        if not all([license_number, number_plate, new_password]):
+            return Response(
+                {
+                    "error": "License number, number plate, and new password are required"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate password length
+        if len(new_password) < 6:
+            return Response(
+                {"error": "Password must be at least 6 characters long"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Find user profile by license number and number plate
+        try:
+            from django.db.models import Q
+
+            print(
+                f"[Forgot Password] Searching for license: '{license_number}', plate: '{number_plate}'"
+            )
+
+            # Build query - both fields must match (case-insensitive)
+            # Exclude NULL and empty values
+            query = Q()
+            query &= Q(license_number__isnull=False) & ~Q(license_number="")
+            query &= Q(license_number__iexact=license_number)
+            query &= Q(number_plate__isnull=False) & ~Q(number_plate="")
+            query &= Q(number_plate__iexact=number_plate)
+
+            profiles = UserProfile.objects.filter(query)
+
+            if not profiles.exists():
+                print(
+                    f"[Forgot Password] No user found with license '{license_number}' and plate '{number_plate}'"
+                )
+                # Log available profiles for debugging (first 5 only)
+                sample_profiles = UserProfile.objects.filter(
+                    license_number__isnull=False
+                ).exclude(license_number="")[:5]
+                print(
+                    f"[Forgot Password] Sample profiles in DB: {[(p.user.username if p.user else 'N/A', p.license_number, p.number_plate) for p in sample_profiles]}"
+                )
+
+                return Response(
+                    {
+                        "error": "No user found with matching license number and number plate. Please verify your information and try again."
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Use the first matching profile
+            profile = profiles.first()
+            user = profile.user
+
+            if not user:
+                print(f"[Forgot Password] Profile found but no associated user!")
+                return Response(
+                    {"error": "User account not found. Please contact support."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            print(f"[Forgot Password] Found user: {user.username} (ID: {user.id})")
+
+        except Exception as lookup_error:
+            print(f"[Forgot Password] Error during lookup: {str(lookup_error)}")
+            return Response(
+                {
+                    "error": "Failed to find user account. Please verify your license number and number plate are correct."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Update password
+        user.password = make_password(new_password)
+        user.save()
+
+        # Update last_password_reset timestamp
+        from django.utils import timezone
+
+        profile.last_password_reset = timezone.now()
+        profile.save()
+
+        print(
+            f"✅ Password reset successful for user {user.username} (ID: {user.id}) via forgot password"
+        )
+
+        return Response(
+            {
+                "message": "Password reset successful! You can now sign in with your new password.",
+                "user_id": user.id,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        import traceback
+
+        print(f"❌ Forgot password error: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return Response(
+            {"error": f"Password reset failed: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def detect_car_parked(request, booking_id):
     """Detect when car is parked and start the timer"""
