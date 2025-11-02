@@ -1454,9 +1454,17 @@ class SmartParkAdmin {
 
     // Best-effort backend persist (strip any prefix like "report_")
     try {
-      const numericId = String(id).startsWith("report_")
-        ? String(id).replace(/^report_/, "")
-        : String(id);
+      // Strip any prefix (report_, alert_, etc.) to get numeric ID
+      let numericId = String(id);
+      // Remove any prefix pattern (word followed by underscore)
+      numericId = numericId.replace(/^[a-zA-Z]+_/, "");
+      // Ensure it's a valid number, fallback to original if not
+      if (!/^\d+$/.test(numericId)) {
+        numericId = String(id).replace(/^report_/, "");
+      }
+      console.log(
+        `Resolving report: original ID="${id}", numeric ID="${numericId}"`
+      );
       fetch(`${this.apiBaseUrl}/admin/user-reports/${numericId}/resolve/`, {
         method: "POST",
         headers: {
@@ -1464,8 +1472,10 @@ class SmartParkAdmin {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ status: "resolved" }),
-      });
-    } catch (_) {}
+      }).catch((err) => console.error("Failed to resolve report:", err));
+    } catch (err) {
+      console.error("Error in resolveReport:", err);
+    }
 
     this.showNotification("Report marked as resolved.", "success");
   }
@@ -5799,15 +5809,31 @@ class SmartParkAdmin {
 
     // Try to persist to backend (best-effort)
     try {
-      await fetch(`${this.apiBaseUrl}/admin/user-reports/${id}/resolve/`, {
-        method: "POST",
-        headers: {
-          Authorization: `Token ${this.token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status: "resolved" }),
-      });
-    } catch (_) {}
+      // Strip any prefix (report_, alert_, etc.) to get numeric ID
+      let numericId = String(id);
+      // Remove any prefix pattern (word followed by underscore)
+      numericId = numericId.replace(/^[a-zA-Z]+_/, "");
+      // Ensure it's a valid number, fallback to original if not
+      if (!/^\d+$/.test(numericId)) {
+        numericId = String(id).replace(/^report_/, "");
+      }
+      console.log(
+        `Resolving report: original ID="${id}", numeric ID="${numericId}"`
+      );
+      await fetch(
+        `${this.apiBaseUrl}/admin/user-reports/${numericId}/resolve/`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Token ${this.token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status: "resolved" }),
+        }
+      ).catch((err) => console.error("Failed to resolve report:", err));
+    } catch (err) {
+      console.error("Error in resolveReport:", err);
+    }
 
     this.showNotification(
       "Report marked as resolved and user notified.",
