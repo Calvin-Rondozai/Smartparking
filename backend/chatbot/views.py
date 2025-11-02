@@ -5,7 +5,7 @@ from rest_framework import status
 from django.utils import timezone
 from datetime import timedelta
 
-from parking_app.models import Booking, ParkingSpot
+from parking_app.models import Booking, ParkingSpot, UserProfile
 from parking_app.serializers import BookingSerializer
 
 # Twilio imports for WhatsApp webhook
@@ -16,6 +16,10 @@ try:
     from twilio.twiml.messaging_response import MessagingResponse
 except ImportError:
     MessagingResponse = None
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(["GET"])
@@ -92,25 +96,137 @@ def booking_history(request):
 @permission_classes([AllowAny])
 def available_slots(request):
     """
-    Return available slots in real time using existing ParkingSpot data.
-    Only show slots A and B (your actual parking slots).
+    Return available slots in real time using IoT sensor data (same as mobile app).
+    Only show Slot A and Slot B (your actual parking slots).
+    Uses the same logic as mobile app - checks both IoT data and database.
     """
     try:
-        # Only show slots A and B that are not occupied
-        spots = ParkingSpot.objects.filter(
-            is_occupied=False, spot_number__in=["A", "B"]
+        from django.utils import timezone
+        from datetime import timedelta
+        from iot_integration.models import SensorData, IoTDevice
+        from parking_app.models import ParkingLot, ParkingSpot, Booking
+
+        # Get or create parking lot
+        try:
+            lot = ParkingLot.objects.get(name="IoT Smart Parking")
+        except ParkingLot.DoesNotExist:
+            lot = ParkingLot.objects.create(
+                name="IoT Smart Parking",
+                address="IoT Smart Parking Location",
+                total_spots=2,
+            )
+
+        # Check for recent sensor data (within last 60 seconds)
+        recent_sensor_data = SensorData.objects.filter(
+            timestamp__gte=timezone.now() - timedelta(seconds=60)
+        ).exists()
+
+        # If IoT is online, update spots from sensor data first (same as mobile app)
+        if recent_sensor_data:
+            devices = IoTDevice.objects.filter(is_active=True).order_by("id")
+            for i, device in enumerate(devices):
+                latest_data = (
+                    SensorData.objects.filter(device=device)
+                    .order_by("-timestamp")
+                    .first()
+                )
+                if latest_data:
+                    time_diff = timezone.now() - latest_data.timestamp
+                    if time_diff.total_seconds() < 60:
+                        slot_name = f"Slot {'A' if i == 0 else 'B'}"
+                        try:
+                            spot = ParkingSpot.objects.get(
+                                parking_lot=lot, spot_number=slot_name
+                            )
+                            # Use dual sensor data if available (same as mobile app)
+                            if (
+                                hasattr(latest_data, "slot1_occupied")
+                                and latest_data.slot1_occupied is not None
+                            ):
+                                if i == 0:  # Slot A
+                                    spot.is_occupied = latest_data.slot1_occupied
+                                elif i == 1:  # Slot B
+                                    spot.is_occupied = (
+                                        latest_data.slot2_occupied
+                                        if hasattr(latest_data, "slot2_occupied")
+                                        else latest_data.is_occupied
+                                    )
+                            else:
+                                spot.is_occupied = latest_data.is_occupied
+                            spot.save()
+                        except ParkingSpot.DoesNotExist:
+                            pass
+
+        # Ensure slots exist - create them if they don't
+        for slot_name in ["Slot A", "Slot B"]:
+            spot, created = ParkingSpot.objects.get_or_create(
+                parking_lot=lot,
+                spot_number=slot_name,
+                defaults={
+                    "name": slot_name,
+                    "is_occupied": False,
+                    "price_per_hour": 2.50,
+                },
+            )
+            if created:
+                logger.info(f"📱 Created missing parking spot: {slot_name}")
+
+        # Get all spots (Slot A and Slot B)
+        all_spots = ParkingSpot.objects.filter(
+            parking_lot=lot, spot_number__in=["Slot A", "Slot B"]
         )
+
+        logger.info(f"📱 Found {all_spots.count()} total spots in database")
+
+        # Filter to only show spots without active bookings (this is the key check!)
+        available_spots = []
+        for spot in all_spots:
+            # Check if there's an active booking for this spot
+            active_bookings = Booking.objects.filter(parking_spot=spot, status="active")
+            has_active_booking = active_bookings.exists()
+
+            logger.info(
+                f"📱 Checking spot {spot.spot_number}: is_occupied={spot.is_occupied}, "
+                f"has_active_booking={has_active_booking}, "
+                f"active_booking_count={active_bookings.count()}"
+            )
+
+            # Spot is available if it has no active booking
+            # (We ignore is_occupied flag if there's no booking - IoT might be wrong)
+            if not has_active_booking:
+                available_spots.append(spot)
+                logger.info(
+                    f"📱 Spot {spot.spot_number} is AVAILABLE (no active booking)"
+                )
+            else:
+                # Even if spot is marked as not occupied, if there's a booking, it's not available
+                booking_ids = [str(b.id) for b in active_bookings]
+                logger.info(
+                    f"📱 Spot {spot.spot_number} has active booking(s) {', '.join(booking_ids)}, "
+                    f"excluding from available list"
+                )
+
         result = [
             {
                 "id": s.id,
                 "name": getattr(s, "spot_number", None)
                 or getattr(s, "name", None)
                 or f"Slot {s.id}",
+                "spot_number": getattr(s, "spot_number", None),
             }
-            for s in spots
+            for s in available_spots
         ]
+
+        # Log result
+        logger.info(
+            f"📱 Available slots API returning {len(result)} slots: {[s['name'] for s in result]}"
+        )
         return Response({"available_spots": result})
     except Exception as e:
+        import traceback
+
+        print(f"Error in available_slots: {str(e)}")
+        print(traceback.format_exc())
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -122,19 +238,73 @@ def reserve_slot(request):
     Expected body: { slot_id: number, duration_minutes: number }
     TODO: Integrate with your exact Booking creation logic if different.
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     try:
         slot_id = request.data.get("slot_id")
         duration_minutes = int(request.data.get("duration_minutes") or 60)
         if not slot_id:
+            logger.warning(
+                f"Reserve API: slot_id missing for user {request.user.username}"
+            )
             return Response(
                 {"error": "slot_id is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Minimal placeholder: create active booking using existing fields
-        # Replace with service/helper if you have one already.
+        # Get the spot and check availability
         spot = ParkingSpot.objects.get(id=slot_id)
+        logger.info(
+            f"Reserve API: Attempting to reserve {spot.spot_number} (ID: {slot_id}) for user {request.user.username}"
+        )
+
+        # Check for active bookings on this spot (this is the real check!)
+        active_booking = Booking.objects.filter(
+            parking_spot=spot, status="active"
+        ).first()
+
+        if active_booking:
+            logger.warning(
+                f"Reserve API: Slot {spot.spot_number} has active booking ID: {active_booking.id}"
+            )
+            return Response(
+                {
+                    "error": f"Slot {spot.spot_number} is already booked (Booking #{active_booking.id})"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if user already has an active booking
+        user_active_booking = Booking.objects.filter(
+            user=request.user, status="active"
+        ).first()
+
+        if user_active_booking:
+            logger.warning(
+                f"Reserve API: User {request.user.username} already has active booking ID: {user_active_booking.id}"
+            )
+            return Response(
+                {
+                    "error": f"You already have an active booking for {user_active_booking.parking_spot.spot_number}. Please complete or cancel it first."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Note: We don't check spot.is_occupied here because IoT sensor data might be stale
+        # The real check is if there's an active booking (checked above)
+
         start = timezone.now()
         end = start + timedelta(minutes=duration_minutes)
+
+        # Get number_plate safely
+        number_plate = ""
+        try:
+            profile = UserProfile.objects.get(user=request.user)
+            number_plate = profile.number_plate or ""
+        except UserProfile.DoesNotExist:
+            logger.warning(f"Reserve API: User {request.user.username} has no profile")
+            pass
 
         booking = Booking.objects.create(
             user=request.user,
@@ -145,16 +315,34 @@ def reserve_slot(request):
             status="active",
             grace_period_started=start,  # Enable timer detection
             timer_started=None,  # Will be set when car detected
-            number_plate=(
-                getattr(request.user.profile, "number_plate", "")
-                if hasattr(request.user, "profile")
-                else ""
-            ),
+            number_plate=number_plate,
         )
+
+        # Mark spot as occupied
+        spot.is_occupied = True
+        spot.save()
+
+        logger.info(
+            f"Reserve API: Successfully created booking ID: {booking.id} for {spot.spot_number}"
+        )
+
+        # Trigger ESP32 LED if available
+        try:
+            from parking_app.views import trigger_esp32_booking_led
+
+            trigger_esp32_booking_led(spot.spot_number, "blue")
+        except Exception:
+            pass
+
         return Response(BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
     except ParkingSpot.DoesNotExist:
+        logger.error(f"Reserve API: Slot ID {slot_id} not found")
         return Response({"error": "Slot not found"}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        logger.error(f"Reserve API: Unexpected error: {str(e)}")
+        import traceback
+
+        logger.error(traceback.format_exc())
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -355,7 +543,7 @@ def twilio_whatsapp_webhook(request):
     import logging
     import traceback
     from django.conf import settings
-    from parking_app.models import UserProfile, ParkingSpot
+    from parking_app.models import UserProfile, ParkingSpot, ParkingLot, Booking
     from django.contrib.auth.models import User
     from datetime import timedelta
     from django.utils import timezone
@@ -365,34 +553,100 @@ def twilio_whatsapp_webhook(request):
     logger = logging.getLogger(__name__)
 
     # Helper function to call existing chatbot APIs (same as mobile app)
-    def call_chatbot_api(endpoint, method="GET", data=None):
-        """Call the exact same API endpoints the mobile app uses"""
+    def call_chatbot_api(endpoint, method="GET", data=None, query_params=None):
+        """
+        Call the exact same API endpoints the mobile app uses.
+        This ensures WhatsApp bot uses identical logic and data as mobile app.
+        """
         from django.test import RequestFactory
         from django.contrib.auth.models import AnonymousUser
+        from rest_framework.response import Response
+        from rest_framework import status
+        import json
 
-        factory = RequestFactory()
-        if method == "GET":
-            req = factory.get(f"/api/chatbot/{endpoint}/")
-        else:
-            req = factory.post(f"/api/chatbot/{endpoint}/", data or {})
-
-        # Set user for authenticated endpoints
         user = get_user()
-        req.user = user if user else AnonymousUser()
+        factory = RequestFactory()
 
-        # Import and call the actual view functions
-        if endpoint == "available-slots":
-            return available_slots(req)
-        elif endpoint == "current-booking":
-            return current_booking(req)
-        elif endpoint == "booking-history":
-            return booking_history(req)
-        elif endpoint == "reserve":
-            return reserve_slot(req)
-        elif endpoint == "help":
-            return help_info(req)
+        try:
+            # Create request based on method
+            if method == "GET":
+                # Build URL with query params
+                url = f"/api/chatbot/{endpoint}/"
+                if query_params:
+                    from urllib.parse import urlencode
 
-        return None
+                    url += "?" + urlencode(query_params)
+                django_request = factory.get(url)
+            else:
+                # POST request
+                json_data = json.dumps(data or {}) if data else "{}"
+                django_request = factory.post(
+                    f"/api/chatbot/{endpoint}/",
+                    data=json_data,
+                    content_type="application/json",
+                )
+
+            # Set user on the Django request (DRF views will wrap it themselves)
+            django_request.user = user if user else AnonymousUser()
+
+            # Disable CSRF checks for internal API calls (RequestFactory doesn't include CSRF tokens)
+            django_request._dont_enforce_csrf_checks = True
+
+            # For GET requests, manually parse query params for DRF
+            if method == "GET" and query_params:
+                # DRF accesses query params via request.GET or request.query_params
+                # Set them in request.GET for DRF to parse
+                from django.http import QueryDict
+
+                qd = QueryDict(mutable=True)
+                for key, value in query_params.items():
+                    qd[key] = value
+                django_request.GET = qd
+
+            # For POST requests with JSON data, properly encode it
+            if method == "POST" and data:
+                import json
+
+                django_request._body = json.dumps(data).encode("utf-8")
+                # Set content type
+                django_request.META["CONTENT_TYPE"] = "application/json"
+
+            # Call the actual view functions with Django request (same as mobile app)
+            # DRF decorators will wrap it in a DRF Request internally
+            try:
+                if endpoint == "available-slots":
+                    response = available_slots(django_request)
+                    logger.info(
+                        f"📱 available-slots API returned: status={response.status_code}, data keys={list(response.data.keys()) if hasattr(response.data, 'keys') else 'N/A'}"
+                    )
+                    return response
+                elif endpoint == "current-booking":
+                    return current_booking(django_request)
+                elif endpoint == "booking-history":
+                    return booking_history(django_request)
+                elif endpoint == "reserve":
+                    return reserve_slot(django_request)
+                elif endpoint == "help":
+                    return help_info(django_request)
+            except Exception as inner_e:
+                logger.error(f"Error inside view function {endpoint}: {inner_e}")
+                import traceback
+
+                logger.error(traceback.format_exc())
+                raise
+
+        except Exception as e:
+            logger.error(f"Error calling chatbot API {endpoint}: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
+            # Return error response
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # Fallback - should never reach here
+        return Response({"error": "Unknown endpoint"}, status=status.HTTP_404_NOT_FOUND)
 
     # Translation support for multi-language (English, Shona, Ndebele)
     translations = {
@@ -695,22 +949,35 @@ def twilio_whatsapp_webhook(request):
 
                         # Process the pending action immediately
                         if pending_action == 1:  # Book a slot
-                            spots = ParkingSpot.objects.filter(
-                                is_occupied=False, spot_number__in=["A", "B"]
-                            )
-                            if not spots.exists():
+                            # Use the same API as mobile app
+                            try:
+                                api_response = call_chatbot_api("available-slots")
+                                if api_response.status_code == 200:
+                                    slots_data = api_response.data.get(
+                                        "available_spots", []
+                                    )
+
+                                    if not slots_data:
+                                        return reply_messages(
+                                            [success_msg, t("no_slots")]
+                                        )
+
+                                    msg = f"{t('available_intro')} 🚗:\n"
+                                    for slot in slots_data:
+                                        slot_name = slot.get("name") or slot.get(
+                                            "spot_number", "Unknown"
+                                        )
+                                        slot_id = slot.get("id", "?")
+                                        msg += f"• {slot_name} (#{slot_id})\n"
+                                    msg += f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
+                                    return reply_messages([success_msg, msg])
+                                else:
+                                    return reply_messages([success_msg, t("no_slots")])
+                            except Exception as e:
+                                logger.error(
+                                    f"Error getting available slots after login: {e}"
+                                )
                                 return reply_messages([success_msg, t("no_slots")])
-                            slot_a = spots.filter(spot_number="A").first()
-                            slot_b = spots.filter(spot_number="B").first()
-                            msg = f"{t('available_intro')} 🚗:\n"
-                            if slot_a:
-                                msg += f"• {slot_a.spot_number} (#{slot_a.id})\n"
-                            if slot_b:
-                                msg += f"• {slot_b.spot_number} (#{slot_b.id})\n"
-                            msg += (
-                                f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
-                            )
-                            return reply_messages([success_msg, msg])
                         elif pending_action == 2:  # Check booking
                             booking = (
                                 Booking.objects.filter(user=user, status="active")
@@ -851,22 +1118,40 @@ def twilio_whatsapp_webhook(request):
                 # Use the exact same API as mobile app
                 try:
                     api_response = call_chatbot_api("available-slots")
+                    logger.info(f"📱 API response status: {api_response.status_code}")
+                    logger.info(f"📱 API response data: {api_response.data}")
+
                     if api_response.status_code == 200:
                         slots_data = api_response.data.get("available_spots", [])
+                        logger.info(
+                            f"📱 Found {len(slots_data)} available slots: {slots_data}"
+                        )
 
                         if not slots_data:
+                            logger.warning("📱 No slots found in API response")
                             return reply_text("🚫 No slots available right now.")
 
                         msg = "🅿️ Available slots:\n"
                         for slot in slots_data:
-                            msg += f"• {slot['name']} (#{slot['id']})\n"
+                            slot_name = slot.get("name") or slot.get(
+                                "spot_number", "Unknown"
+                            )
+                            slot_id = slot.get("id", "?")
+                            msg += f"• {slot_name} (#{slot_id})\n"
                         msg += "\nType 'book A' or 'book B' to reserve"
 
+                        logger.info(f"📱 Sending available slots message: {msg[:100]}")
                         return reply_text(msg)
                     else:
+                        logger.error(
+                            f"📱 API returned non-200 status: {api_response.status_code}"
+                        )
                         return reply_text("🚫 No slots available right now.")
                 except Exception as e:
                     logger.error(f"Error getting available slots: {e}")
+                    import traceback
+
+                    logger.error(traceback.format_exc())
                     return reply_text("🚫 No slots available right now.")
 
             elif menu_choice == 2:  # Check current booking
@@ -896,9 +1181,11 @@ def twilio_whatsapp_webhook(request):
 
             elif menu_choice == 3:  # View booking history
                 logger.info("📱 Processing option 3 - View booking history")
-                # Use the exact same API as mobile app
+                # Use the exact same API as mobile app (with default 7 days window)
                 try:
-                    api_response = call_chatbot_api("booking-history")
+                    api_response = call_chatbot_api(
+                        "booking-history", query_params={"window": "days", "value": "7"}
+                    )
                     logger.info(f"📱 API response status: {api_response.status_code}")
                     logger.info(f"📱 API response data: {api_response.data}")
 
@@ -1126,23 +1413,36 @@ def twilio_whatsapp_webhook(request):
                     "Enter your username:"
                 )
 
-            spots = ParkingSpot.objects.filter(
-                is_occupied=False, spot_number__in=["A", "B"]
-            )
-            if not spots.exists():
+            # Use the exact same API as mobile app for consistency
+            try:
+                api_response = call_chatbot_api("available-slots")
+                if api_response.status_code == 200:
+                    slots_data = api_response.data.get("available_spots", [])
+
+                    if not slots_data:
+                        logger.info("📱 No available slots found via API")
+                        return reply_text(t("no_slots"))
+
+                    msg = f"{t('available_intro')} 🚗:\n"
+                    for slot in slots_data:
+                        slot_name = slot.get("name") or slot.get(
+                            "spot_number", "Unknown"
+                        )
+                        slot_id = slot.get("id", "?")
+                        msg += f"• {slot_name} (#{slot_id})\n"
+                    msg += f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
+
+                    logger.info(f"📱 Found {len(slots_data)} available slots")
+                    return reply_text(msg)
+                else:
+                    logger.error(f"📱 API returned status {api_response.status_code}")
+                    return reply_text(t("no_slots"))
+            except Exception as e:
+                logger.error(f"Error getting available slots: {e}")
+                import traceback
+
+                logger.error(traceback.format_exc())
                 return reply_text(t("no_slots"))
-
-            slot_a = spots.filter(spot_number="A").first()
-            slot_b = spots.filter(spot_number="B").first()
-
-            msg = f"{t('available_intro')} 🚗:\n"
-            if slot_a:
-                msg += f"• {slot_a.spot_number} (#{slot_a.id})\n"
-            if slot_b:
-                msg += f"• {slot_b.spot_number} (#{slot_b.id})\n"
-            msg += f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
-
-            return reply_text(msg)
 
         # Book slot handler - require authentication
         if "book" in body_lower or "reserve" in body_lower:
@@ -1152,7 +1452,7 @@ def twilio_whatsapp_webhook(request):
                 )
                 request.session["whatsapp_flow"] = "login_username"
                 return reply_text(
-                    "🔐 Please login first to book a slot:\n" "Enter your username:"
+                    "🔐 Please login first to book a slot:\nEnter your username:"
                 )
 
             slot_input = extract_slot(body) or (
@@ -1168,62 +1468,125 @@ def twilio_whatsapp_webhook(request):
                 )
 
             try:
-                # Find available spot (only A or B)
+                # Find available spot - map "A"/"B" to "Slot A"/"Slot B"
+                slot_name_mapping = {"A": "Slot A", "B": "Slot B"}
                 if slot_input not in ["A", "B"]:
                     return reply_text(
                         "❌ Only slots A and B are available for booking."
                     )
 
-                spot = ParkingSpot.objects.filter(
-                    is_occupied=False, spot_number=slot_input
+                # Get the correct slot name format
+                actual_slot_name = slot_name_mapping[slot_input]
+                logger.info(f"📱 Booking slot '{slot_input}' -> '{actual_slot_name}'")
+
+                # Get parking lot
+                try:
+                    lot = ParkingLot.objects.get(name="IoT Smart Parking")
+                except ParkingLot.DoesNotExist:
+                    logger.error("📱 IoT Smart Parking lot not found")
+                    return reply_text(t("slot_not_available", slot_input))
+
+                # Get the spot
+                try:
+                    spot = ParkingSpot.objects.get(
+                        parking_lot=lot, spot_number=actual_slot_name
+                    )
+                    logger.info(
+                        f"📱 Found spot: {spot.spot_number}, is_occupied={spot.is_occupied}"
+                    )
+                except ParkingSpot.DoesNotExist:
+                    logger.error(f"📱 Spot '{actual_slot_name}' not found in database")
+                    return reply_text(t("slot_not_available", slot_input))
+
+                # Check for active bookings on this spot (this is the real check!)
+                active_booking = Booking.objects.filter(
+                    parking_spot=spot, status="active"
                 ).first()
 
-                if not spot:
-                    return reply_text(t("slot_not_available", slot_input))
+                if active_booking:
+                    logger.warning(
+                        f"📱 Slot {actual_slot_name} has active booking ID: {active_booking.id}"
+                    )
+                    return reply_text(
+                        f"⚠️ Slot {slot_input} is currently booked (Booking #{active_booking.id}). "
+                        f"Please wait for it to be completed or choose another slot."
+                    )
+
+                # Also check if spot is marked as occupied (but not by a booking - might be IoT sensor data)
+                # We'll allow booking even if sensor says occupied, as long as there's no active booking
+                # This matches mobile app behavior
+
+                logger.info(f"📱 Slot {actual_slot_name} is available for booking")
 
                 user = get_user()
 
-                # Check existing booking
-                existing = Booking.objects.filter(user=user, status="active").first()
-                if existing:
-                    return reply_text(
-                        f"⚠️ You already have an active booking for {existing.parking_spot.spot_number}. "
-                        f"Please complete or cancel it first."
+                # Check existing booking using the same API as mobile app
+                try:
+                    current_booking_response = call_chatbot_api("current-booking")
+                    if (
+                        current_booking_response.status_code == 200
+                        and current_booking_response.data.get("hasBooking")
+                    ):
+                        existing_slot = current_booking_response.data.get(
+                            "slot", "slot"
+                        )
+                        return reply_text(
+                            f"⚠️ You already have an active booking for {existing_slot}. "
+                            f"Please complete or cancel it first."
+                        )
+                except Exception as e:
+                    logger.warning(f"Error checking current booking: {e}")
+
+                # Use the exact same reserve API as mobile app
+                try:
+                    logger.info(
+                        f"📱 Calling reserve API for slot_id={spot.id}, duration=60, user={user.username if user else 'None'}"
+                    )
+                    reserve_response = call_chatbot_api(
+                        "reserve",
+                        method="POST",
+                        data={"slot_id": spot.id, "duration_minutes": 60},
                     )
 
-                # Check balance
-                profile = UserProfile.objects.get(user=user)
-                if float(profile.balance) < 1.00:
-                    return reply_text("❌ Insufficient balance. Minimum $1 required.")
+                    logger.info(
+                        f"📱 Reserve API response: status={reserve_response.status_code}, data={reserve_response.data if hasattr(reserve_response, 'data') else 'N/A'}"
+                    )
 
-                # Create booking
-                now = timezone.now()
-                booking = Booking.objects.create(
-                    user=user,
-                    parking_spot=spot,
-                    start_time=now,
-                    end_time=now + timedelta(hours=12),
-                    duration_minutes=0,
-                    vehicle_name="WhatsApp User",
-                    status="active",
-                    grace_period_started=now,
-                    timer_started=None,
-                    number_plate=getattr(profile, "number_plate", ""),
-                )
+                    if reserve_response.status_code == 201:
+                        # Success! Extract booking data
+                        booking_data = reserve_response.data
+                        slot_name = (
+                            booking_data.get("slot_name")
+                            or booking_data.get("spot_number")
+                            or spot.spot_number
+                        )
 
-                # Trigger ESP32 LED
-                try:
-                    from parking_app.views import trigger_esp32_booking_led
+                        logger.info(f"📱 Successfully booked {slot_name} via API")
 
-                    trigger_esp32_booking_led(spot.spot_number, "blue")
-                except:
-                    pass
+                        # End session after booking
+                        request.session["whatsapp_active_session"] = False
+                        request.session.pop("whatsapp_authenticated_user_id", None)
 
-                # End session after booking
-                request.session["whatsapp_active_session"] = False
-                request.session.pop("whatsapp_authenticated_user_id", None)
+                        return reply_text(t("booked", slot_name))
+                    else:
+                        # API returned error
+                        error_msg = reserve_response.data.get(
+                            "error", "Reservation failed"
+                        )
+                        logger.error(
+                            f"📱 Reserve API error (status {reserve_response.status_code}): {error_msg}"
+                        )
+                        logger.error(f"📱 Full response data: {reserve_response.data}")
+                        return reply_text(
+                            f"❌ {error_msg}\n\n"
+                            f"Please try again or contact support."
+                        )
+                except Exception as api_error:
+                    logger.error(f"Error calling reserve API: {api_error}")
+                    import traceback
 
-                return reply_text(t("booked", spot.spot_number))
+                    logger.error(traceback.format_exc())
+                    return reply_text(t("reservation_failed"))
 
             except Exception as e:
                 return reply_text(f"❌ Booking failed: {str(e)}")
@@ -1270,9 +1633,10 @@ def twilio_whatsapp_webhook(request):
                     "📱 Balance check requested but user not authenticated - prompting login"
                 )
                 request.session["whatsapp_flow"] = "login_username"
-            return reply_text(
-                "🔐 Please login first to check your balance:\n" "Enter your username:"
-            )
+                return reply_text(
+                    "🔐 Please login first to check your balance:\n"
+                    "Enter your username:"
+                )
 
             user = get_user()
             profile = UserProfile.objects.get(user=user)
@@ -1285,9 +1649,10 @@ def twilio_whatsapp_webhook(request):
                     "📱 Cancel booking requested but user not authenticated - prompting login"
                 )
                 request.session["whatsapp_flow"] = "login_username"
-            return reply_text(
-                "🔐 Please login first to cancel your booking:\n" "Enter your username:"
-            )
+                return reply_text(
+                    "🔐 Please login first to cancel your booking:\n"
+                    "Enter your username:"
+                )
 
             user = get_user()
             booking = (
@@ -1311,10 +1676,10 @@ def twilio_whatsapp_webhook(request):
                     "📱 History check requested but user not authenticated - prompting login"
                 )
                 request.session["whatsapp_flow"] = "login_username"
-            return reply_text(
-                "🔐 Please login first to view your booking history:\n"
-                "Enter your username:"
-            )
+                return reply_text(
+                    "🔐 Please login first to view your booking history:\n"
+                    "Enter your username:"
+                )
 
             user = get_user()
             bookings = Booking.objects.filter(user=user).order_by("-start_time")[:3]
@@ -1347,10 +1712,19 @@ def twilio_whatsapp_webhook(request):
         logger.error(traceback.format_exc())
 
         # Return a helpful error message in TwiML format
-        resp = MessagingResponse()
-        resp.message(
-            "⚠️ Sorry, I encountered an error. "
-            "Please try again or contact support.\n\n"
-            "Type 'menu' to start over."
-        )
-        return HttpResponse(str(resp), content_type="application/xml")
+        try:
+            resp = MessagingResponse()
+            resp.message(
+                "⚠️ Sorry, I encountered an error. "
+                "Please try again or contact support.\n\n"
+                "Type 'menu' to start over."
+            )
+            return HttpResponse(str(resp), content_type="application/xml")
+        except:
+            # Fallback if MessagingResponse fails
+            return HttpResponse(
+                "<?xml version='1.0' encoding='UTF-8'?>"
+                "<Response><Message>⚠️ Sorry, I encountered an error. "
+                "Please try again or contact support.</Message></Response>",
+                content_type="application/xml",
+            )
