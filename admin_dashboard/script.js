@@ -6213,14 +6213,27 @@ class SmartParkAdmin {
       }
 
       const result = await response.json();
-      this.showNotification("User updated successfully", "success");
+      console.log("✅ [Update User] Response received:", result);
 
-      // Refresh the users list
-      await this.loadUsersData();
-      // Also refresh bookings so updated number plates reflect immediately
-      try {
-        await this.loadAllBookings();
-      } catch (_) {}
+      // If response includes updated user data, use it
+      if (result.user) {
+        console.log("✅ [Update User] Updated user data:", result.user);
+        // Update the user in the list if it exists
+        const userIndex = this.allUsers.findIndex(
+          (u) => u.id === parseInt(userId)
+        );
+        if (userIndex !== -1) {
+          // Merge updated data
+          this.allUsers[userIndex] = {
+            ...this.allUsers[userIndex],
+            ...result.user,
+          };
+          console.log("✅ [Update User] Updated user in allUsers array");
+        }
+      }
+
+      // Don't show notification here - let the caller handle it
+      // Refresh will be handled by the caller
 
       return result;
     } catch (error) {
@@ -6475,6 +6488,12 @@ class SmartParkAdmin {
 
     console.log("🔍 DEBUG: Sending userData:", userData);
     console.log(
+      "🔍 DEBUG: Role selected:",
+      document.getElementById("editUserRole").value
+    );
+    console.log("🔍 DEBUG: is_staff:", userData.is_staff);
+    console.log("🔍 DEBUG: is_superuser:", userData.is_superuser);
+    console.log(
       "🔍 DEBUG: number_plate value:",
       document.getElementById("editNumberPlate").value
     );
@@ -6486,8 +6505,13 @@ class SmartParkAdmin {
     }
 
     try {
-      await this.updateUser(userId, userData);
-      // If password was changed, refresh fetch user and update UI
+      const result = await this.updateUser(userId, userData);
+      console.log("✅ User update result:", result);
+
+      // Always refresh the users list to show updated role
+      await this.loadUsersData();
+
+      // If password was changed, also fetch individual user for details view
       if (userData.password) {
         const updatedUser = await this.fetchUserById(userId);
         if (updatedUser) {
@@ -6495,9 +6519,12 @@ class SmartParkAdmin {
           this.viewUserDetails(updatedUser);
         }
       }
+
       this.closeModal();
+      this.showNotification("User updated successfully", "success");
     } catch (error) {
       console.error("Error updating user:", error);
+      this.showNotification(`Failed to update user: ${error.message}`, "error");
     }
   }
 

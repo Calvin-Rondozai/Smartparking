@@ -160,11 +160,51 @@ def _require_admin_token(request):
     return token == "admin_authenticated"
 
 
+def _check_superadmin_permission(request):
+    """Check if user has superadmin permissions (can edit/delete/create)"""
+    # For hardcoded admin bypass
+    token = request.META.get("HTTP_AUTHORIZATION", "").replace("Token ", "")
+    if token == "admin_authenticated":
+        # Check if we can get user info from session or token
+        # For now, we'll check if user is superadmin via User model
+        # This is a simplified check - in production, you'd want proper session/token validation
+        return True  # Hardcoded admin is always superadmin
+
+    # Try to get user from request if available
+    if hasattr(request, "user") and request.user.is_authenticated:
+        return request.user.is_superuser
+
+    # If we can't determine, deny access (fail safe)
+    return False
+
+
+def _check_staff_permission(request):
+    """Check if user has staff permissions (can view)"""
+    token = request.META.get("HTTP_AUTHORIZATION", "").replace("Token ", "")
+    if token == "admin_authenticated":
+        return True  # If authenticated, allow view
+
+    if hasattr(request, "user") and request.user.is_authenticated:
+        return request.user.is_staff or request.user.is_superuser
+
+    return False
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def admin_users_create(request):
     if not _require_admin_token(request):
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+    # Only superadmin can create users
+    if not _check_superadmin_permission(request):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Access denied. Only superadmin can create users.",
+            },
+            status=403,
+        )
     try:
         data = json.loads(request.body or "{}")
         username = data.get("username")
@@ -214,9 +254,30 @@ def admin_users_create(request):
 def admin_users_update(request, user_id):
     if not _require_admin_token(request):
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+    # Only superadmin can update users
+    if not _check_superadmin_permission(request):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Access denied. Only superadmin can update users.",
+            },
+            status=403,
+        )
     try:
         data = json.loads(request.body or "{}")
         user = User.objects.get(id=user_id)
+
+        # Debug: Log incoming data
+        print(f"🔍 [Admin API] Updating user {user_id} ({user.username})")
+        print(f"🔍 [Admin API] Received data: {json.dumps(data, indent=2)}")
+
+        # Store original role for logging
+        original_is_superuser = user.is_superuser
+        original_is_staff = user.is_staff
+        print(
+            f"🔍 [Admin API] Current role - is_superuser: {original_is_superuser}, is_staff: {original_is_staff}"
+        )
 
         # Update core fields
         for field in [
@@ -224,14 +285,95 @@ def admin_users_update(request, user_id):
             "email",
             "first_name",
             "last_name",
-            "is_staff",
             "is_active",
-            "is_superuser",
         ]:
             if field in data:
                 setattr(user, field, data[field])
+
+        # Handle role changes (is_staff and is_superuser)
+        # Role logic:
+        # - superuser: is_superuser=True, is_staff=True
+        # - staff: is_superuser=False, is_staff=True
+        # - user: is_superuser=False, is_staff=False
+
+        # Check if role fields are being updated
+        if "is_superuser" in data or "is_staff" in data:
+            # Get new values from data (use current values as defaults if not provided)
+            if "is_superuser" in data:
+                is_superuser_new = bool(data["is_superuser"])
+            else:
+                is_superuser_new = user.is_superuser
+
+            if "is_staff" in data:
+                is_staff_new = bool(data["is_staff"])
+            else:
+                is_staff_new = user.is_staff
+
+            print(
+                f"🔍 [Admin API] Role update - is_superuser: {is_superuser_new}, is_staff: {is_staff_new}"
+            )
+
+            # Ensure consistency: superuser always implies staff
+            if is_superuser_new and not is_staff_new:
+                is_staff_new = True
+                print(
+                    f"⚠️ [Admin] User {user.username} - Superuser requires staff, auto-setting is_staff=True"
+                )
+
+            # Ensure consistency: non-staff cannot be superuser
+            if not is_staff_new and is_superuser_new:
+                is_superuser_new = False
+                print(
+                    f"⚠️ [Admin] User {user.username} - Non-staff cannot be superuser, auto-setting is_superuser=False"
+                )
+
+            # Apply the values
+            user.is_superuser = is_superuser_new
+            user.is_staff = is_staff_new
+
+            # Log the change
+            if is_superuser_new:
+                print(
+                    f"✅ [Admin] User {user.username} role set to SUPERADMIN (is_superuser=True, is_staff=True)"
+                )
+            elif is_staff_new:
+                print(
+                    f"✅ [Admin] User {user.username} role set to STAFF (is_superuser=False, is_staff=True)"
+                )
+            else:
+                print(
+                    f"✅ [Admin] User {user.username} role set to USER (is_superuser=False, is_staff=False)"
+                )
+
+        # Log role changes
+        if (
+            original_is_superuser != user.is_superuser
+            or original_is_staff != user.is_staff
+        ):
+            role_before = (
+                "superadmin"
+                if original_is_superuser
+                else ("staff" if original_is_staff else "user")
+            )
+            role_after = (
+                "superadmin"
+                if user.is_superuser
+                else ("staff" if user.is_staff else "user")
+            )
+            print(
+                f"🔄 [Admin] Role change for {user.username}: {role_before} → {role_after}"
+            )
+            print(
+                f"🔍 [Admin API] Final role - is_superuser: {user.is_superuser}, is_staff: {user.is_staff}"
+            )
+        else:
+            print(f"ℹ️ [Admin API] No role change - role remains the same")
+
+        # Update password if provided
         if data.get("password"):
             user.set_password(data["password"])
+            print(f"✅ [Admin] Password updated for user {user.username}")
+
         user.save()
 
         # Update profile
@@ -246,7 +388,27 @@ def admin_users_update(request, user_id):
                 pass
         profile.save()
 
-        return JsonResponse({"success": True})
+        # Return updated user data including role information
+        return JsonResponse(
+            {
+                "success": True,
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "is_staff": user.is_staff,
+                    "is_superuser": user.is_superuser,
+                    "is_active": user.is_active,
+                    "role": (
+                        "superadmin"
+                        if user.is_superuser
+                        else ("staff" if user.is_staff else "user")
+                    ),
+                },
+            }
+        )
     except User.DoesNotExist:
         return JsonResponse({"success": False, "error": "User not found"}, status=404)
     except json.JSONDecodeError:
@@ -260,6 +422,16 @@ def admin_users_update(request, user_id):
 def admin_users_delete(request, user_id):
     if not _require_admin_token(request):
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+    # Only superadmin can delete users
+    if not _check_superadmin_permission(request):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Access denied. Only superadmin can delete users.",
+            },
+            status=403,
+        )
     try:
         user = User.objects.get(id=user_id)
         user.delete()
@@ -275,6 +447,16 @@ def admin_users_delete(request, user_id):
 def admin_users_toggle_status(request, user_id):
     if not _require_admin_token(request):
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+    # Only superadmin can toggle user status
+    if not _check_superadmin_permission(request):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Access denied. Only superadmin can change user status.",
+            },
+            status=403,
+        )
     try:
         user = User.objects.get(id=user_id)
         user.is_active = not user.is_active
@@ -296,6 +478,16 @@ def admin_users_toggle_status(request, user_id):
 def admin_users_reset_password(request, user_id):
     if not _require_admin_token(request):
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+    # Only superadmin can reset passwords
+    if not _check_superadmin_permission(request):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Access denied. Only superadmin can reset passwords.",
+            },
+            status=403,
+        )
     try:
         data = json.loads(request.body or "{}")
         new_password = data.get("password") or "Password123!"
@@ -323,6 +515,16 @@ def admin_users_reset_password(request, user_id):
 def admin_bookings_delete(request, booking_id):
     if not _require_admin_token(request):
         return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
+
+    # Only superadmin can delete bookings
+    if not _check_superadmin_permission(request):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "Access denied. Only superadmin can delete bookings.",
+            },
+            status=403,
+        )
     try:
         booking = Booking.objects.get(id=booking_id)
         booking.delete()
@@ -414,15 +616,28 @@ def admin_unbooked_occupied_alerts(request):
 def admin_user_report_resolve(request, report_id: int):
     """Mark a UserReport as resolved"""
     try:
+        # Check admin token
+        if not _require_admin_token(request):
+            return JsonResponse(
+                {"success": False, "message": "Unauthorized"}, status=401
+            )
+
+        # Only superadmin can resolve reports
+        if not _check_superadmin_permission(request):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "message": "Access denied. Only superadmin can resolve reports.",
+                },
+                status=403,
+            )
+
         try:
             report = UserReport.objects.get(id=report_id)
         except UserReport.DoesNotExist:
             return JsonResponse(
                 {"success": False, "error": "Report not found"}, status=404
             )
-        # Optionally check admin token
-        # if not _require_admin_token(request):
-        #     return JsonResponse({"success": False, "message": "Unauthorized"}, status=401)
         report.status = "resolved"
         report.save(update_fields=["status"])
         return JsonResponse({"success": True})

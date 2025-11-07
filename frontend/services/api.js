@@ -9,7 +9,7 @@ const fallbackStorage = {
 
 // Base API URL
 // Base API URL - Use your computer's IP address for React Native
-export const API_BASE_URL = "http://10.147.17.47:8000/api"; // Local development
+export const API_BASE_URL = "http://172.30.77.47:8000/api"; // Local development
 // const API_BASE_URL = "http://localhost:8000/api"; // For local testing
 // const API_BASE_URL = "http://10.200.27.32:8000/api"; // For Android emulator (Wi-Fi)
 // const API_BASE_URL = "http://192.168.137.1:8000/api"; // For Android emulator (Hotspot)

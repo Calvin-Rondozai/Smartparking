@@ -146,6 +146,14 @@ REST_FRAMEWORK = {
 }
 
 # Twilio WhatsApp Settings
-TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "your_account_sid_here")
-TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "your_auth_token_here")
+TWILIO_ACCOUNT_SID = os.environ.get(
+    "TWILIO_ACCOUNT_SID",
+    "AC60aed31aed4473c563b8f0783d58242f",
+    # "TWILIO_ACCOUNT_SID", "ACf6911308e6c77c49a82cb893aeac6a93"
+)
+TWILIO_AUTH_TOKEN = os.environ.get(
+    "TWILIO_AUTH_TOKEN",
+    "406a3e1d4023d5a32e9425c1acfcbc38",
+    # "TWILIO_ACCOUNT_SID", "ACf6911308e6c77c49a82cb893aeac6a93"
+)
 TWILIO_WHATSAPP_NUMBER = "+14155238886"  # Your Twilio WhatsApp sandbox number

@@ -39,8 +39,14 @@ def _progress_booking_billing(booking):
         # Billing only during active timer window
         if not booking.timer_started or booking.status != "active":
             return
-        # Determine end threshold for normal time (no overtime handling here)
-        bill_until = min(now, booking.end_time)
+        # Determine end threshold: if end_time == start_time, it's a pay-per-use booking (no fixed duration)
+        # In that case, bill until now (car hasn't left yet)
+        if booking.end_time == booking.start_time:
+            # Pay-per-use booking: bill until current time (car still parked)
+            bill_until = now
+        else:
+            # Fixed duration booking: bill until end_time or now, whichever is earlier
+            bill_until = min(now, booking.end_time)
         # Initialize last_billing_at
         if (
             not booking.last_billing_at
@@ -831,24 +837,35 @@ def detect_car_parked(request, booking_id):
                 )
                 print(f"⏰ Grace period duration: {grace_elapsed:.1f} seconds")
 
-                # Send WhatsApp notification when car parks
-                try:
-                    from chatbot.views import send_whatsapp_message
-                    from parking_app.models import UserProfile
+                # WhatsApp notification: Only for WhatsApp bookings (LED changed from blue to red)
+                if booking.user.username.startswith("whatsapp_"):
+                    try:
+                        from chatbot.views import send_whatsapp_message
 
-                    profile = UserProfile.objects.filter(user=booking.user).first()
-                    if profile and profile.phone:
+                        # Hardcoded number for proof of concept
+                        test_phone = "+263713291359"
+
                         slot_name = booking.parking_spot.spot_number
                         message = (
                             f"✅ Car parked successfully!\n\n"
                             f"📍 Slot: {slot_name}\n"
                             f"⏰ Timer started - You'll be charged $1 per 30 seconds.\n"
-                            f"🔴 Red light indicates your slot is occupied.\n\n"
+                            f"🔴 LED changed to RED (car detected)\n\n"
                             f"Thank you for using Smart Parking! 🚗"
                         )
-                        send_whatsapp_message(profile.phone, message)
-                except Exception as e:
-                    print(f"⚠️ Failed to send WhatsApp notification: {e}")
+                        print(
+                            f"📱 [WhatsApp] Sending parked notification to {test_phone} for booking {booking.id}"
+                        )
+                        result = send_whatsapp_message(test_phone, message)
+                        if result:
+                            print(f"✅ [WhatsApp] Notification sent successfully")
+                        else:
+                            print(f"⚠️ [WhatsApp] Notification failed to send")
+                    except Exception as e:
+                        print(f"⚠️ [WhatsApp] Failed to send notification: {e}")
+                        import traceback
+
+                        traceback.print_exc()
 
                 return Response(
                     {
@@ -954,11 +971,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -1058,11 +1075,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -1167,11 +1184,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -1332,11 +1349,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -1441,11 +1458,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -1551,11 +1568,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -1660,11 +1677,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -1768,11 +1785,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -1877,11 +1894,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -2080,7 +2097,9 @@ class BookingList(generics.ListCreateAPIView):
             booking = Booking.objects.create(**booking_data)
             print(f"✅ Booking created successfully: {booking.id}")
             print(f"🕐 Grace period started at: {now}")
-            print(f"⏰ Timer will start when car is detected (within 10 seconds)")
+            print(
+                f"⏰ Timer will start when car is detected (within 20 seconds grace period)"
+            )
 
             # Trigger ESP32 LED control for the booked slot
             try:
@@ -2271,17 +2290,24 @@ def complete_active_booking(request, booking_id):
 
         # Persist final total_cost and completion details
         booking.total_cost = float(CURRENT_BOOKING_TOTAL_COST or final_cost)
-        try:
-            # Free up the parking spot after completion
-            if (
-                booking.parking_spot
-                and getattr(booking.parking_spot, "is_occupied", None) is not None
-            ):
-                booking.parking_spot.is_occupied = False
-                booking.parking_spot.save()
-        except Exception:
-            pass
         booking.save()
+
+        # Free up the parking spot after completion (CRITICAL: must happen after booking.save())
+        try:
+            if booking.parking_spot:
+                spot = booking.parking_spot
+                spot.is_occupied = False
+                spot.save()
+                print(
+                    f"✅ Freed up parking spot {spot.spot_number} after booking completion"
+                )
+            else:
+                print(f"⚠️ Booking {booking.id} has no parking_spot assigned")
+        except Exception as e:
+            print(f"❌ ERROR: Failed to free up parking spot: {e}")
+            import traceback
+
+            traceback.print_exc()
         print(f"💾 Stored total_cost in database: ${booking.total_cost}")
 
         # Turn off LED best-effort
@@ -2290,13 +2316,14 @@ def complete_active_booking(request, booking_id):
         except Exception:
             pass
 
-        # Send WhatsApp notification when car leaves
-        try:
-            from chatbot.views import send_whatsapp_message
-            from parking_app.models import UserProfile
+        # WhatsApp notification: Only for WhatsApp bookings (LED changed from red to green)
+        if booking.user.username.startswith("whatsapp_"):
+            try:
+                from chatbot.views import send_whatsapp_message
 
-            profile = UserProfile.objects.filter(user=request.user).first()
-            if profile and profile.phone:
+                # Hardcoded number for proof of concept
+                test_phone = "+263713291359"
+
                 slot_name = booking.parking_spot.spot_number
                 duration_minutes = elapsed_seconds // 60
                 duration_seconds = elapsed_seconds % 60
@@ -2305,13 +2332,23 @@ def complete_active_booking(request, booking_id):
                     f"📍 Slot: {slot_name}\n"
                     f"⏱️ Duration: {duration_minutes}m {duration_seconds}s\n"
                     f"💰 Amount charged: ${float(CURRENT_BOOKING_TOTAL_COST or final_cost):.2f}\n"
-                    f"💳 Balance: ${float(current_balance):.2f}\n\n"
-                    f"✅ Payment successful!\n"
-                    f"Thank you for using Smart Parking! 🚗"
+                    f"💳 Balance: ${float(current_balance):.2f}\n"
+                    f"🟢 LED changed to GREEN (slot available)\n\n"
+                    f"✅ Thank you for using Smart Parking! 🚗"
                 )
-                send_whatsapp_message(profile.phone, message)
-        except Exception as e:
-            print(f"⚠️ Failed to send WhatsApp notification: {e}")
+                print(
+                    f"📱 [WhatsApp] Sending left notification to {test_phone} - car left slot {slot_name}"
+                )
+                result = send_whatsapp_message(test_phone, message)
+                if result:
+                    print(f"✅ [WhatsApp] Notification sent successfully")
+                else:
+                    print(f"⚠️ [WhatsApp] Notification failed to send")
+            except Exception as e:
+                print(f"⚠️ [WhatsApp] Failed to send notification: {e}")
+                import traceback
+
+                traceback.print_exc()
 
         return Response(
             {
@@ -2413,11 +2450,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -2553,11 +2590,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -2662,11 +2699,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -2757,11 +2794,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -2866,11 +2903,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -2993,11 +3030,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -3102,11 +3139,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -3312,11 +3349,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -3421,11 +3458,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -3581,11 +3618,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -3690,11 +3727,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -3893,11 +3930,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -4002,11 +4039,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -4115,11 +4152,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -4224,11 +4261,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -4339,11 +4376,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -4448,11 +4485,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -4586,11 +4623,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -4695,11 +4732,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -4871,11 +4908,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -4980,11 +5017,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -5118,11 +5155,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -5227,11 +5264,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -5484,11 +5521,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -5698,11 +5735,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -5807,11 +5844,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -5915,11 +5952,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -6024,11 +6061,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -6279,11 +6316,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -6397,11 +6434,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -6506,11 +6543,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -6666,11 +6703,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now
@@ -6775,11 +6812,11 @@ def detect_car_parked(request, booking_id):
         booking = Booking.objects.get(id=booking_id, user=request.user)
         now = timezone.now()
 
-        # Check if grace period is still active (within 10 seconds)
+        # Check if grace period is still active (within 20 seconds)
         if booking.grace_period_started:
             grace_elapsed = (now - booking.grace_period_started).total_seconds()
 
-            if grace_elapsed <= 10:
+            if grace_elapsed <= 20:
                 # Car parked within grace period - start timer
                 booking.timer_started = now
                 booking.grace_period_ended = now

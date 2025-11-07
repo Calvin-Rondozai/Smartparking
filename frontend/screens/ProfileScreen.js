@@ -572,15 +572,15 @@ const ProfileScreen = ({ navigation }) => {
               style={[styles.button, { flex: 1 }]}
               onPress={openEditModal}
             >
-              <Text style={styles.buttonText}>Edit Profile</Text>
+              <Text style={styles.buttonText}>Edit</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.button, { flex: 1, backgroundColor: theme.error }]}
               onPress={handleLogout}
             >
-            <Text style={styles.buttonText}>Log Out</Text>
-          </TouchableOpacity>
+              <Text style={styles.buttonText}>Log Out</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -646,17 +646,17 @@ const ProfileScreen = ({ navigation }) => {
                   <Text style={styles.modalButtonText}>Cancel</Text>
                 </TouchableOpacity>
 
-            <TouchableOpacity
+                <TouchableOpacity
                   style={[styles.modalButton, styles.saveButton]}
-              onPress={handleUpdateProfile}
-              disabled={updating}
-            >
-              {updating ? (
+                  onPress={handleUpdateProfile}
+                  disabled={updating}
+                >
+                  {updating ? (
                     <ActivityIndicator color="#fff" />
-              ) : (
+                  ) : (
                     <Text style={styles.modalButtonText}>Save</Text>
-              )}
-            </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </View>

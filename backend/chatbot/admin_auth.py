@@ -57,7 +57,7 @@ def admin_login(request):
                 request,
             )
 
-        # HARD-CODED ADMIN BYPASS (dashboard only)
+        # HARD-CODED ADMIN BYPASS (dashboard only) - Superadmin role
         # Accept fixed credentials regardless of DB state
         HARDCODED_USER = "admin"
         HARDCODED_PASS = "admin123"
@@ -73,6 +73,13 @@ def admin_login(request):
                             "email": "",
                             "is_superuser": True,
                             "is_staff": True,
+                            "role": "superadmin",
+                            "permissions": {
+                                "can_view": True,
+                                "can_edit": True,
+                                "can_delete": True,
+                                "can_create": True,
+                            },
                             "full_name": "Admin",
                         },
                         "token": "admin_authenticated",
@@ -102,18 +109,46 @@ def admin_login(request):
                 request,
             )
 
-        # Check if user is staff (admin)
-        if not user.is_staff:
+        # Role-based access control
+        # Only superusers and staff can access admin dashboard
+        # Regular users (is_staff=False) cannot login
+        if not user.is_staff and not user.is_superuser:
             return _add_cors_headers(
                 JsonResponse(
                     {
                         "success": False,
-                        "message": "Access denied. Admin privileges required",
+                        "message": "Access denied. You do not have permission to access the admin dashboard.",
                     },
                     status=403,
                 ),
                 request,
             )
+
+        # Determine user role
+        if user.is_superuser:
+            role = "superadmin"
+            permissions = {
+                "can_view": True,
+                "can_edit": True,
+                "can_delete": True,
+                "can_create": True,
+            }
+        elif user.is_staff:
+            role = "staff"
+            permissions = {
+                "can_view": True,
+                "can_edit": False,
+                "can_delete": False,
+                "can_create": False,
+            }
+        else:
+            role = "user"
+            permissions = {
+                "can_view": False,
+                "can_edit": False,
+                "can_delete": False,
+                "can_create": False,
+            }
 
         # Login successful
         return _add_cors_headers(
@@ -126,6 +161,9 @@ def admin_login(request):
                         "username": user.username,
                         "email": user.email,
                         "is_superuser": user.is_superuser,
+                        "is_staff": user.is_staff,
+                        "role": role,
+                        "permissions": permissions,
                     },
                     "token": "admin_authenticated",
                 }

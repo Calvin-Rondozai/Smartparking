@@ -11,7 +11,6 @@ import {
   SafeAreaView,
   Alert,
   RefreshControl,
-  Switch,
   Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,494 +25,468 @@ const { width } = Dimensions.get("window");
 
 const getThemedStyles = (isDark) =>
   StyleSheet.create({
-    // (No changes to the styles – same as your original)
-    container: { flex: 1, backgroundColor: isDark ? "#121212" : "#FFFFFF" },
-    scrollContainer: { paddingBottom: 30 },
+    container: {
+      flex: 1,
+      backgroundColor: isDark ? "#000000" : "#F5F5F7",
+    },
+    scrollContainer: {
+      paddingBottom: 100,
+    },
     header: {
+      paddingHorizontal: 20,
+      paddingTop: 15,
+      paddingBottom: 16,
+      backgroundColor: isDark ? "#000000" : "#F5F5F7",
+    },
+    headerTop: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 20,
-      paddingTop: 60,
-      paddingBottom: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: isDark ? "#333" : "#F0F0F0",
-    },
-    headerLeft: { flexDirection: "row", alignItems: "center" },
-    logoContainer: {
-      width: 48,
-      height: 48,
-      borderRadius: 12,
-      backgroundColor: isDark ? "#333" : "#F5F5F5",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    headerText: { marginLeft: 12 },
-    appTitle: { color: "green", fontSize: 18, fontWeight: "bold" },
-    timeText: { color: isDark ? "#aaa" : "#666", fontSize: 14 },
-    headerRight: { flexDirection: "row", alignItems: "center" },
-    notificationIcon: { marginRight: 16, position: "relative", padding: 8 },
-    notificationBadge: {
-      position: "absolute",
-      top: 6,
-      right: 6,
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: "#FF4444",
-    },
-    profileIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: isDark ? "#333" : "#F5F5F5",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    welcomeSection: {
-      paddingHorizontal: 20,
-      paddingVertical: 30,
-      alignItems: "center",
-    },
-    welcomeText: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 28,
-      fontWeight: "bold",
-      textAlign: "center",
-      marginBottom: 4,
-    },
-    nameText: {
-      color: "#10B981",
-      fontSize: 24,
-      fontWeight: "600",
-      textAlign: "center",
-      marginBottom: 8,
-    },
-    subtitleText: {
-      color: isDark ? "#ccc" : "#10B981",
-      fontSize: 16,
-      textAlign: "center",
-    },
-    searchContainer: { paddingHorizontal: 20, marginBottom: 30 },
-    searchBar: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: isDark ? "#222" : "#F5F5F5",
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderWidth: 1,
-      borderColor: isDark ? "#444" : "#E0E0E0",
-    },
-    searchIcon: { marginRight: 12 },
-    searchInput: {
-      flex: 1,
-      color: isDark ? "#fff" : "#333",
-      fontSize: 16,
-    },
-    statsContainer: {
-      flexDirection: "row",
-      paddingHorizontal: 20,
-      marginBottom: 30,
-    },
-    statsCard: {
-      flex: 1,
-      backgroundColor: isDark ? "#222" : "#F9F9F9",
-      borderRadius: 12,
-      padding: 20,
-      marginHorizontal: 4,
-      alignItems: "center",
-      borderWidth: 1,
-      borderColor: isDark ? "#444" : "#E0E0E0",
-    },
-    statsNumber: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 24,
-      fontWeight: "bold",
-      marginBottom: 4,
-    },
-    statsLabel: {
-      color: isDark ? "#ccc" : "#666",
-      fontSize: 12,
-      textAlign: "center",
-    },
-    iotStatusCard: {
-      backgroundColor: isDark ? "#1c1c1c" : "#fff",
-      borderRadius: 12,
-      padding: 16,
-      marginHorizontal: 20,
       marginBottom: 20,
-      borderWidth: 1,
-      borderColor: isDark ? "#444" : "#E0E0E0",
+    },
+    timeContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+    },
+    timeText: {
+      color: isDark ? "#FFFFFF" : "#000000",
+      fontSize: 15,
+      fontWeight: "600",
+      marginLeft: 6,
+    },
+    headerActions: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    iconButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+      justifyContent: "center",
+      alignItems: "center",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.4 : 0.08,
+      shadowRadius: 8,
       elevation: 3,
     },
-    iotStatusHeader: {
+    walletButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 22,
+      shadowColor: "#10B981",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+      elevation: 6,
+    },
+    walletText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: 17,
+      marginRight: 6,
+    },
+    heroSection: {
+      paddingHorizontal: 20,
+      paddingBottom: 24,
+    },
+    logoRow: {
       flexDirection: "row",
       alignItems: "center",
       marginBottom: 12,
     },
-    iotStatusTitle: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 16,
-      fontWeight: "bold",
-      marginLeft: 8,
+    logoCircle: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+      justifyContent: "center",
+      alignItems: "center",
+      marginRight: 12,
+      shadowColor: "#10B981",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 12,
+      elevation: 4,
     },
-    iotStatsRow: {
+    appTitle: {
+      color: "#10B981",
+      fontSize: 28,
+      fontWeight: "800",
+      letterSpacing: -0.8,
+    },
+    welcomeText: {
+      color: isDark ? "#8E8E93" : "#8E8E93",
+      fontSize: 16,
+      fontWeight: "500",
+      marginBottom: 4,
+    },
+    nameText: {
+      color: isDark ? "#FFFFFF" : "#000000",
+      fontSize: 40,
+      fontWeight: "800",
+      letterSpacing: -1.2,
+      marginBottom: 6,
+    },
+    subtitleText: {
+      color: isDark ? "#8E8E93" : "#8E8E93",
+      fontSize: 18,
+      fontWeight: "500",
+    },
+    statsCard: {
+      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+      borderRadius: 24,
+      padding: 24,
+      marginHorizontal: 20,
+      marginBottom: 24,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: isDark ? 0.5 : 0.1,
+      shadowRadius: 20,
+      elevation: 8,
+    },
+    statsTitle: {
+      color: isDark ? "#8E8E93" : "#8E8E93",
+      fontSize: 14,
+      fontWeight: "600",
+      textTransform: "uppercase",
+      letterSpacing: 1,
+      marginBottom: 20,
+    },
+    statsGrid: {
       flexDirection: "row",
       justifyContent: "space-between",
-      marginBottom: 8,
     },
-    iotStat: {
+    statItem: {
       alignItems: "center",
       flex: 1,
     },
-    iotStatNumber: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 18,
-      fontWeight: "bold",
-      marginBottom: 2,
+    statNumber: {
+      color: isDark ? "#FFFFFF" : "#000000",
+      fontSize: 32,
+      fontWeight: "800",
+      letterSpacing: -1,
+      marginBottom: 6,
     },
-    iotStatLabel: {
-      color: isDark ? "#ccc" : "#666",
-      fontSize: 11,
-      textAlign: "center",
+    statLabel: {
+      color: isDark ? "#8E8E93" : "#8E8E93",
+      fontSize: 13,
+      fontWeight: "600",
     },
-    iotLastUpdate: {
-      color: isDark ? "#888" : "#999",
-      fontSize: 10,
-      textAlign: "center",
-      fontStyle: "italic",
-    },
-    nearbySection: {
-      paddingHorizontal: 20,
-      marginBottom: 30,
+    statDivider: {
+      width: 1,
+      height: "100%",
+      backgroundColor: isDark ? "#2C2C2E" : "#E5E5EA",
     },
     sectionHeader: {
       flexDirection: "row",
       alignItems: "center",
-      marginBottom: 20,
+      paddingHorizontal: 24,
+      marginBottom: 16,
+      marginTop: 8,
     },
     sectionTitle: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 20,
-      fontWeight: "bold",
-      marginLeft: 8,
+      color: isDark ? "#FFFFFF" : "#000000",
+      fontSize: 26,
+      fontWeight: "800",
+      marginLeft: 10,
+      letterSpacing: -0.8,
+    },
+    spotsContainer: {
+      paddingHorizontal: 20,
+      gap: 16,
     },
     spotCard: {
-      backgroundColor: isDark ? "#1c1c1c" : "#fff",
-      borderRadius: 12,
+      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+      borderRadius: 24,
       padding: 20,
       marginBottom: 16,
-      borderWidth: 1,
-      borderColor: isDark ? "#444" : "#E0E0E0",
-      elevation: 3,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: isDark ? 0.5 : 0.08,
+      shadowRadius: 16,
+      elevation: 6,
+      overflow: "hidden",
     },
-    spotHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 12,
+    spotBadge: {
+      position: "absolute",
+      top: 20,
+      right: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 16,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 4,
     },
-    spotTitleContainer: {
-      flex: 1,
+    spotBadgeText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.5,
     },
-    streetName: {
-      color: isDark ? "#AAA" : "#666",
-      fontSize: 14,
-      fontWeight: "500",
-      marginBottom: 2,
+    streetTag: {
+      color: isDark ? "#8E8E93" : "#8E8E93",
+      fontSize: 12,
+      fontWeight: "700",
+      marginBottom: 8,
+      textTransform: "uppercase",
+      letterSpacing: 1.2,
     },
     spotName: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 18,
-      fontWeight: "bold",
-    },
-    availabilityBadge: {
-      backgroundColor: "#4CAF50",
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 8,
-    },
-    availabilityText: {
-      color: "#fff",
-      fontSize: 12,
-      fontWeight: "500",
-    },
-    spotDetails: {
-      flexDirection: "row",
-      justifyContent: "space-between",
+      color: isDark ? "#FFFFFF" : "#000000",
+      fontSize: 28,
+      fontWeight: "800",
       marginBottom: 16,
+      letterSpacing: -0.8,
     },
-    spotInfo: {
+    spotInfoRow: {
+      flexDirection: "row",
+      marginBottom: 20,
+      gap: 24,
+    },
+    infoItem: {
       flexDirection: "row",
       alignItems: "center",
     },
-    spotPrice: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 14,
+    infoText: {
+      color: isDark ? "#FFFFFF" : "#000000",
+      fontSize: 16,
       fontWeight: "600",
-      marginLeft: 4,
-    },
-    spotRating: {
-      color: "#FFB800",
-      fontSize: 14,
-      fontWeight: "600",
-      marginLeft: 4,
+      marginLeft: 8,
     },
     reserveButton: {
-      backgroundColor: "green",
-      paddingVertical: 12,
-      borderRadius: 8,
+      paddingVertical: 16,
+      borderRadius: 16,
       alignItems: "center",
+      shadowColor: "#10B981",
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.35,
+      shadowRadius: 12,
+      elevation: 8,
     },
     reserveText: {
-      color: "#fff",
-      fontSize: 16,
-      fontWeight: "bold",
+      color: "#FFFFFF",
+      fontSize: 18,
+      fontWeight: "700",
+      letterSpacing: -0.3,
     },
     featuresSection: {
       paddingHorizontal: 20,
-      marginBottom: 30,
+      marginTop: 8,
+      marginBottom: 32,
     },
     featuresGrid: {
       flexDirection: "row",
-      justifyContent: "space-between",
-      marginTop: 20,
+      gap: 12,
     },
     featureCard: {
       flex: 1,
-      backgroundColor: isDark ? "#222" : "#F9F9F9",
-      borderRadius: 12,
+      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+      borderRadius: 20,
       padding: 20,
-      marginHorizontal: 4,
       alignItems: "center",
-      borderWidth: 1,
-      borderColor: isDark ? "#444" : "#E0E0E0",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.4 : 0.06,
+      shadowRadius: 12,
+      elevation: 4,
+    },
+    featureIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7",
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 12,
     },
     featureTitle: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 14,
-      fontWeight: "bold",
-      marginTop: 8,
+      color: isDark ? "#FFFFFF" : "#000000",
+      fontSize: 15,
+      fontWeight: "700",
       marginBottom: 4,
+      textAlign: "center",
     },
     featureDesc: {
-      color: isDark ? "#ccc" : "#666",
+      color: isDark ? "#8E8E93" : "#8E8E93",
       fontSize: 12,
       textAlign: "center",
+      fontWeight: "500",
     },
-    bottomSpacing: {
-      height: 30,
-    },
-    offlineMessage: {
-      alignItems: "center",
+    offlineCard: {
+      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+      borderRadius: 24,
       padding: 40,
-      backgroundColor: isDark ? "#1c1c1c" : "#f8f9fa",
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: isDark ? "#444" : "#E0E0E0",
-    },
-    offlineText: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 18,
-      fontWeight: "bold",
-      marginTop: 16,
-      marginBottom: 8,
-    },
-    offlineSubtext: {
-      color: isDark ? "#ccc" : "#666",
-      fontSize: 14,
-      textAlign: "center",
-    },
-    activeBookingAlert: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: "#E8F5E9", // Light green background
-      paddingVertical: 10,
-      paddingHorizontal: 15,
-      borderRadius: 8,
       marginHorizontal: 20,
-      marginBottom: 10,
-      borderWidth: 1,
-      borderColor: "#A5D6A7", // Green border
+      alignItems: "center",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: isDark ? 0.5 : 0.08,
+      shadowRadius: 16,
+      elevation: 6,
     },
-    activeBookingText: {
-      flex: 1,
-      color: "#2E7D32", // Darker green text
-      fontSize: 14,
-      marginLeft: 10,
+    offlineIcon: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7",
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 16,
     },
-    viewBookingButton: {
-      backgroundColor: "#2196F3",
-      paddingVertical: 8,
-      paddingHorizontal: 15,
-      borderRadius: 8,
-    },
-    viewBookingButtonText: {
-      color: "#fff",
-      fontSize: 14,
-      fontWeight: "bold",
-    },
-    title: {
-      color: isDark ? "#fff" : "#333",
-      fontSize: 28,
-      fontWeight: "bold",
+    offlineTitle: {
+      color: isDark ? "#FFFFFF" : "#000000",
+      fontSize: 22,
+      fontWeight: "800",
       marginBottom: 8,
+      letterSpacing: -0.5,
     },
-    subtitle: {
-      color: isDark ? "#ccc" : "#666",
-      fontSize: 16,
+    offlineDesc: {
+      color: isDark ? "#8E8E93" : "#8E8E93",
+      fontSize: 15,
       textAlign: "center",
+      fontWeight: "500",
+      lineHeight: 22,
     },
     modalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.4)",
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
       justifyContent: "flex-end",
     },
     modalContent: {
-      backgroundColor: isDark ? "#1C1C1E" : "#F2F2F7",
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
+      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+      borderTopLeftRadius: 32,
+      borderTopRightRadius: 32,
       paddingTop: 16,
-      paddingBottom: 34,
-      maxHeight: "85%",
-      shadowColor: "#000",
-      shadowOffset: {
-        width: 0,
-        height: -4,
-      },
-      shadowOpacity: 0.25,
-      shadowRadius: 12,
-      elevation: 20,
+      paddingBottom: 40,
+      maxHeight: "90%",
     },
     modalHandle: {
-      width: 36,
+      width: 40,
       height: 5,
-      backgroundColor: isDark
-        ? "rgba(255, 255, 255, 0.3)"
-        : "rgba(0, 0, 0, 0.3)",
+      backgroundColor: isDark ? "#48484A" : "#C6C6C8",
       borderRadius: 3,
       alignSelf: "center",
-      marginBottom: 20,
+      marginBottom: 24,
+    },
+    modalHeader: {
+      paddingHorizontal: 24,
+      marginBottom: 24,
     },
     modalTitle: {
-      fontSize: 22,
-      fontWeight: "600",
+      fontSize: 32,
+      fontWeight: "800",
       color: isDark ? "#FFFFFF" : "#000000",
       marginBottom: 8,
-      paddingHorizontal: 20,
-      textAlign: "center",
+      letterSpacing: -1,
     },
     modalSubtitle: {
-      fontSize: 15,
-      color: isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(0, 0, 0, 0.6)",
+      fontSize: 16,
+      color: isDark ? "#8E8E93" : "#8E8E93",
+      fontWeight: "500",
+    },
+    searchInputContainer: {
       paddingHorizontal: 20,
-      marginBottom: 20,
-      textAlign: "center",
+      marginBottom: 24,
     },
     searchInput: {
-      backgroundColor: isDark ? "#2C2C2E" : "#FFFFFF",
-      borderRadius: 12,
-      padding: 16,
+      backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7",
+      borderRadius: 16,
+      padding: 18,
       color: isDark ? "#FFFFFF" : "#000000",
-      fontSize: 16,
-      marginHorizontal: 20,
-      marginBottom: 20,
-      shadowColor: "#000",
-      shadowOffset: {
-        width: 0,
-        height: 1,
-      },
-      shadowOpacity: 0.1,
-      shadowRadius: 2,
-      elevation: 2,
+      fontSize: 17,
+      fontWeight: "500",
     },
     modalSlotsContainer: {
       maxHeight: 400,
       paddingHorizontal: 20,
     },
     modalSlotCard: {
-      backgroundColor: isDark ? "#2C2C2E" : "#FFFFFF",
-      borderRadius: 12,
-      padding: 16,
+      backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7",
+      borderRadius: 20,
+      padding: 20,
       marginBottom: 12,
-      shadowColor: "#000",
-      shadowOffset: {
-        width: 0,
-        height: 1,
-      },
-      shadowOpacity: 0.1,
-      shadowRadius: 2,
-      elevation: 2,
     },
-    modalSlotLocation: {
-      color: isDark ? "rgba(255, 255, 255, 0.6)" : "rgba(0, 0, 0, 0.6)",
-      fontSize: 13,
-      marginBottom: 6,
-      fontWeight: "500",
+    modalSlotStreet: {
+      color: isDark ? "#8E8E93" : "#8E8E93",
+      fontSize: 20,
+      fontWeight: "700",
+      marginBottom: 8,
       textTransform: "uppercase",
-      letterSpacing: 0.5,
+      letterSpacing: 1,
     },
     modalSlotName: {
       color: isDark ? "#FFFFFF" : "#000000",
-      fontSize: 17,
+      fontSize: 13,
       fontWeight: "600",
-      marginBottom: 8,
+      marginBottom: 12,
+      letterSpacing: -0.5,
     },
     modalSlotStatus: {
       flexDirection: "row",
       alignItems: "center",
     },
     modalSlotStatusText: {
-      fontSize: 14,
-      fontWeight: "500",
-      marginLeft: 6,
+      fontSize: 15,
+      fontWeight: "600",
+      marginLeft: 8,
     },
-    modalButtonsContainer: {
+    modalButtons: {
       flexDirection: "row",
       paddingHorizontal: 20,
-      marginTop: 20,
+      marginTop: 24,
       gap: 12,
     },
-    modalSearchButton: {
+    modalButton: {
       flex: 1,
-      backgroundColor: "green",
-      paddingVertical: 14,
-      borderRadius: 12,
+      paddingVertical: 18,
+      borderRadius: 16,
       alignItems: "center",
-      shadowColor: "green",
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.3,
-      shadowRadius: 4,
-      elevation: 3,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+      elevation: 6,
     },
-    modalSearchButtonText: {
+    modalButtonText: {
       color: "#FFFFFF",
-      fontSize: 16,
-      fontWeight: "600",
+      fontSize: 18,
+      fontWeight: "700",
+      letterSpacing: -0.3,
     },
-    modalCloseButton: {
-      flex: 1,
-      backgroundColor: "#EF4444",
-      paddingVertical: 14,
-      borderRadius: 12,
+    emptyState: {
+      padding: 48,
       alignItems: "center",
-      shadowColor: "#EF4444",
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.3,
-      shadowRadius: 4,
-      elevation: 3,
     },
-    modalCloseButtonText: {
-      color: "#FFFFFF",
-      fontSize: 16,
-      fontWeight: "600",
+    emptyIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: isDark ? "#2C2C2E" : "#F5F5F7",
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    emptyTitle: {
+      color: isDark ? "#FFFFFF" : "#000000",
+      fontSize: 20,
+      fontWeight: "700",
+      marginBottom: 6,
+    },
+    emptyDesc: {
+      color: isDark ? "#8E8E93" : "#8E8E93",
+      fontSize: 15,
+      fontWeight: "500",
     },
   });
 
@@ -561,28 +534,28 @@ const SmartParkingHome = ({ navigation }) => {
     fetchWallet();
   }, []);
 
-  // Refresh wallet whenever Home gains focus (after returning from Top-up)
   useFocusEffect(
     React.useCallback(() => {
       fetchWallet();
+      fetchData();
+      fetchIoTData();
+      fetchUserBookings();
       return () => {};
     }, [])
   );
+
   const fetchWallet = async () => {
     try {
       const data = await walletAPI.getWallet();
       const newBalance = data.balance || 0;
-      const previousBalance = wallet.balance;
 
       setWallet({
         balance: newBalance,
         transactions: data.transactions || [],
       });
 
-      // Voice feedback for low wallet balance
       try {
         if (newBalance < 1.5 && newBalance > 0) {
-          // Low balance warning (only if balance is positive but low)
           (async () => {
             try {
               await voiceFeedbackService.onLowBalance(newBalance);
@@ -599,7 +572,6 @@ const SmartParkingHome = ({ navigation }) => {
     }
   };
 
-  // Auto-refresh IoT data every 5 seconds for real-time updates
   useEffect(() => {
     const interval = setInterval(() => {
       fetchIoTData();
@@ -613,7 +585,6 @@ const SmartParkingHome = ({ navigation }) => {
       if (authData && authData.user) {
         setUserData(authData.user);
       } else if (authData) {
-        // If user data is directly in authData (not nested)
         setUserData(authData);
       }
     } catch (error) {
@@ -642,14 +613,12 @@ const SmartParkingHome = ({ navigation }) => {
     try {
       console.log("Fetching IoT data...");
 
-      // Get parking availability which includes slot data
       const availabilityData = await iotService.getParkingAvailability();
       const [iotStatsData, iotStatusData] = await Promise.all([
         iotService.getParkingStats(),
         iotService.checkSystemStatus(),
       ]);
 
-      // Check if ESP32 is offline
       if (availabilityData.offline) {
         console.log("ESP32 is offline - no real-time data available");
         setIotStatus({
@@ -667,17 +636,14 @@ const SmartParkingHome = ({ navigation }) => {
           lastUpdated: new Date().toISOString(),
         });
         setIotSlots([]);
-        return; // Don't process offline data
+        return;
       }
 
-      // ESP32 is online - process real-time data
-      // Get current user bookings to calculate proper occupancy
       const response = await bookingAPI.getBookings();
       const activeBookings = response.filter(
         (booking) => booking.status === "active"
       );
 
-      // Calculate occupied slots including booked slots
       const totalSpots = availabilityData.spots?.length || 0;
       const physicallyAvailableSpots =
         availabilityData.spots?.filter((slot) => slot.is_available).length || 0;
@@ -694,7 +660,6 @@ const SmartParkingHome = ({ navigation }) => {
         `[HomeScreen] IoT Slot calculation: Total=${totalSpots}, PhysicallyAvailable=${physicallyAvailableSpots}, Booked=${bookedSpots}, Available=${availableSpots}, Occupied=${occupiedSpots}, OccupancyRate=${occupancyRate}%`
       );
 
-      // Update iotStats with calculated values
       const updatedIotStats = {
         ...iotStatsData,
         totalSpots,
@@ -708,9 +673,6 @@ const SmartParkingHome = ({ navigation }) => {
       setIotStatus(iotStatusData);
       setIotSlots(availabilityData.spots || []);
       setUserBookings(activeBookings);
-
-      // Voice feedback for IoT status changes
-      // IoT status voice feedback removed per user request
 
       console.log("IoT data updated:", updatedIotStats, iotStatusData);
       console.log("IoT slots:", availabilityData.spots);
@@ -734,7 +696,6 @@ const SmartParkingHome = ({ navigation }) => {
     }
   };
 
-  // Fetch user's current bookings
   const fetchUserBookings = async () => {
     try {
       const response = await bookingAPI.getBookings();
@@ -744,27 +705,17 @@ const SmartParkingHome = ({ navigation }) => {
       setUserBookings(activeBookings);
       console.log("[HomeScreen] User active bookings:", activeBookings);
 
-      // Recalculate IoT stats to include booked slots
       if (iotSlots.length > 0) {
         const totalSpots = iotSlots.length;
-
-        // Count physically available slots (not occupied by sensors)
         const physicallyAvailableSpots = iotSlots.filter(
           (slot) => slot.is_available
         ).length;
-
-        // Count booked slots
         const bookedSpots = activeBookings.length;
-
-        // Available slots = physically available - booked slots
         const availableSpots = Math.max(
           0,
           physicallyAvailableSpots - bookedSpots
         );
-
-        // Occupied slots = total - available (includes both physically occupied and booked)
         const occupiedSpots = totalSpots - availableSpots;
-
         const occupancyRate =
           totalSpots > 0 ? Math.round((occupiedSpots / totalSpots) * 100) : 0;
 
@@ -796,17 +747,15 @@ const SmartParkingHome = ({ navigation }) => {
     }
   };
 
-  // Get street name from slot
   const getStreetName = (slotName) => {
     if (slotName && slotName.toLowerCase().includes("a")) {
       return "Jason Moyo Ave";
     } else if (slotName && slotName.toLowerCase().includes("b")) {
-      return "Nelson Mandela Ave";
+      return "Nelson Mandela Str";
     }
     return "";
   };
 
-  // Search for slots by location
   const searchSlotsByLocation = () => {
     if (!searchLocation.trim()) {
       Alert.alert("Error", "Please enter a location to search");
@@ -815,7 +764,6 @@ const SmartParkingHome = ({ navigation }) => {
     setShowSearchModal(true);
   };
 
-  // Filter slots by search location
   const getFilteredSlots = () => {
     if (!searchLocation.trim()) return parkingSpots;
 
@@ -826,18 +774,15 @@ const SmartParkingHome = ({ navigation }) => {
     });
   };
 
-  // Use real IoT slot data from your ESP32 sensors
   const parkingSpots =
     iotSlots.length > 0
       ? iotSlots.map((slot) => {
-          // Check if current user has booked this slot
           const userBooking = userBookings.find(
             (booking) =>
               booking.parking_spot?.spot_number === slot.spot_number &&
               booking.status === "active"
           );
 
-          // Check if user has any active booking (to prevent multiple bookings)
           const hasActiveBooking = userBookings.length > 0;
 
           return {
@@ -857,18 +802,15 @@ const SmartParkingHome = ({ navigation }) => {
             canBook: !hasActiveBooking && slot.is_available && !userBooking,
           };
         })
-      : []; // No fallback slots - show empty when IoT is offline
+      : [];
 
   const themedStyles = getThemedStyles(isDark);
 
   const Header = () => (
     <View style={themedStyles.header}>
-      <View style={themedStyles.headerLeft}>
-        <View style={themedStyles.logoContainer}>
-          <Ionicons name="car" size={24} color="#10B981" />
-        </View>
-        <View style={themedStyles.headerText}>
-          <Text style={themedStyles.appTitle}>Smart Parking</Text>
+      <View style={themedStyles.headerTop}>
+        <View style={themedStyles.timeContainer}>
+          <Ionicons name="time-outline" size={18} color="#10B981" />
           <Text style={themedStyles.timeText}>
             {currentTime.toLocaleTimeString([], {
               hour: "2-digit",
@@ -876,155 +818,129 @@ const SmartParkingHome = ({ navigation }) => {
             })}
           </Text>
         </View>
-      </View>
-      <View style={themedStyles.headerRight}>
-        <TouchableOpacity style={themedStyles.notificationIcon}>
-          <Ionicons name="notifications-outline" size={24} color="#10B981" />
-          <View style={themedStyles.notificationBadge} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={themedStyles.profileIcon}
-          onPress={() => navigation.navigate("Profile")}
-        >
-          <Ionicons name="person-outline" size={20} color="#10B981" />
-        </TouchableOpacity>
+        <View style={themedStyles.headerActions}>
+          <TouchableOpacity
+            style={themedStyles.iconButton}
+            onPress={() => setShowSearchModal(true)}
+          >
+            <Ionicons name="search" size={20} color="#10B981" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              themedStyles.walletButton,
+              {
+                backgroundColor:
+                  Number(wallet.balance || 0) < 0 ? "#FF453A" : "#10B981",
+              },
+            ]}
+            onPress={() => navigation.navigate("TopUp")}
+          >
+            <Text style={themedStyles.walletText}>
+              ${Number(wallet.balance || 0).toFixed(2)}
+            </Text>
+            <Ionicons
+              name={Number(wallet.balance || 0) < 0 ? "warning" : "add-circle"}
+              size={20}
+              color="#FFFFFF"
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={themedStyles.iconButton}
+            onPress={() => navigation.navigate("Profile")}
+          >
+            <Ionicons name="person" size={20} color="#10B981" />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
 
-  const WelcomeSection = () => (
-    <View style={themedStyles.welcomeSection}>
+  const HeroSection = () => (
+    <View style={themedStyles.heroSection}>
+      {/* <View style={themedStyles.logoRow}>
+        <View style={themedStyles.logoCircle}>
+          <Ionicons name="car-sport" size={28} color="#10B981" />
+        </View>
+        <Text style={themedStyles.appTitle}>Smart Parking</Text>
+      </View> */}
       <Text style={themedStyles.welcomeText}>Welcome back,</Text>
-        <Text style={themedStyles.nameText}>
-          {userData?.full_name || userData?.first_name || "User"}!
+      <Text style={themedStyles.nameText}>
+        {userData?.full_name || userData?.first_name || "User"}
       </Text>
       <Text style={themedStyles.subtitleText}>
-        Find your perfect parking spot!
+        Find your perfect parking spot
       </Text>
     </View>
   );
 
-  const StatsCards = () => (
-    <View style={themedStyles.statsContainer}>
-      {[
-        [iotStats.availableSpots.toString(), "Available Slots"],
-        [`${iotStats.occupancyRate}%`, "Occupancy"],
-        [iotStats.occupiedSpots.toString(), "Occupied Slots"],
-      ].map(([num, label], i) => (
-        <View key={i} style={themedStyles.statsCard}>
-          <Text style={themedStyles.statsNumber}>{num}</Text>
-          <Text style={themedStyles.statsLabel}>{label}</Text>
+  const StatsCard = () => (
+    <View style={themedStyles.statsCard}>
+      <Text style={themedStyles.statsTitle}>Real-Time Overview</Text>
+      <View style={themedStyles.statsGrid}>
+        <View style={themedStyles.statItem}>
+          <Text style={themedStyles.statNumber}>{iotStats.availableSpots}</Text>
+          <Text style={themedStyles.statLabel}>Available</Text>
         </View>
-      ))}
+        <View style={themedStyles.statDivider} />
+        <View style={themedStyles.statItem}>
+          <Text style={themedStyles.statNumber}>{iotStats.occupancyRate}%</Text>
+          <Text style={themedStyles.statLabel}>Occupancy</Text>
+        </View>
+        <View style={themedStyles.statDivider} />
+        <View style={themedStyles.statItem}>
+          <Text style={themedStyles.statNumber}>{iotStats.occupiedSpots}</Text>
+          <Text style={themedStyles.statLabel}>Occupied</Text>
+        </View>
+      </View>
     </View>
   );
 
-  // Add auto-refresh after booking completion
-  useFocusEffect(
-    React.useCallback(() => {
-      // Refresh data when screen comes into focus (after booking completion)
-      fetchData();
-      fetchIoTData();
-      fetchUserBookings();
-    }, [])
-  );
-
-  const IoTStatusCard = () => (
-    <View style={themedStyles.iotStatusCard}>
-      <View style={themedStyles.iotStatusHeader}>
-        <Ionicons
-          name={iotStatus.online ? "wifi" : "wifi-outline"}
-          size={20}
-          color={iotStatus.online ? "#10B981" : "#EF4444"}
-        />
-        <Text style={themedStyles.iotStatusTitle}>
-          IoT System {iotStatus.online ? "Online" : "Offline"}
-        </Text>
-      </View>
-      <View style={themedStyles.iotStatsRow}>
-        <View style={themedStyles.iotStat}>
-          <Text style={themedStyles.iotStatNumber}>
-            {iotStats.activeDevices}
-          </Text>
-          <Text style={themedStyles.iotStatLabel}>Active Sensors</Text>
-        </View>
-        <View style={themedStyles.iotStat}>
-          <Text style={themedStyles.iotStatNumber}>
-            {iotStats.occupancyRate}%
-          </Text>
-          <Text style={themedStyles.iotStatLabel}>Occupancy</Text>
-        </View>
-        <View style={themedStyles.iotStat}>
-          <Text style={themedStyles.iotStatNumber}>
-            {iotStats.availableSpots}
-          </Text>
-          <Text style={themedStyles.iotStatLabel}>Available</Text>
-        </View>
-      </View>
-      {iotStats.lastUpdated && (
-        <Text style={themedStyles.iotLastUpdate}>
-          Last updated: {new Date(iotStats.lastUpdated).toLocaleTimeString()}
-        </Text>
-      )}
-    </View>
-  );
-
-  const ParkingSpotCard = ({ spot }) => {
-    // Determine street name based on slot name
-    const getStreetName = (slotName) => {
-      if (slotName && slotName.toLowerCase().includes("a")) {
-        return "Jason Moyo Ave";
-      } else if (slotName && slotName.toLowerCase().includes("b")) {
-        return "Nelson Mandela Ave";
-      }
-      return "";
-    };
-
-    return (
+  const ParkingSpotCard = ({ spot }) => (
     <View style={themedStyles.spotCard}>
-      <View style={themedStyles.spotHeader}>
-          <View style={themedStyles.spotTitleContainer}>
-            <Text style={themedStyles.streetName}>
-              {getStreetName(spot.name)}
-            </Text>
-        <Text style={themedStyles.spotName}>{spot.name}</Text>
-          </View>
-        <View
-          style={[
-            themedStyles.availabilityBadge,
-            {
-              backgroundColor: spot.isBookedByUser
-                ? "#2196F3" // Blue for user's booking
-                : spot.isAvailable
-                ? "#4CAF50" // Green for available
-                : "#F44336", // Red for occupied
-            },
-          ]}
-        >
-            <Text style={themedStyles.availabilityText}>
-              {spot.availability}
-            </Text>
+      <View
+        style={[
+          themedStyles.spotBadge,
+          {
+            backgroundColor: spot.isBookedByUser
+              ? "#007AFF"
+              : spot.isAvailable
+              ? "#34C759"
+              : "#FF453A",
+          },
+        ]}
+      >
+        <Text style={themedStyles.spotBadgeText}>{spot.availability}</Text>
+      </View>
+
+      <Text style={themedStyles.streetTag}>{getStreetName(spot.name)}</Text>
+      <Text style={themedStyles.spotName}>{spot.name}</Text>
+
+      <View style={themedStyles.spotInfoRow}>
+        <View style={themedStyles.infoItem}>
+          <Ionicons
+            name="pricetag"
+            size={20}
+            color={isDark ? "#8E8E93" : "#8E8E93"}
+          />
+          <Text style={themedStyles.infoText}>{spot.price}</Text>
+        </View>
+        <View style={themedStyles.infoItem}>
+          <Ionicons name="star" size={20} color="#FF9F0A" />
+          <Text style={themedStyles.infoText}>{spot.rating}</Text>
         </View>
       </View>
-      <View style={themedStyles.spotDetails}>
-        <View style={themedStyles.spotInfo}>
-          <Ionicons name="pricetag-outline" size={16} color="#888" />
-          <Text style={themedStyles.spotPrice}>{spot.price}</Text>
-        </View>
-        <View style={themedStyles.spotInfo}>
-          <Ionicons name="star" size={16} color="#FFB800" />
-          <Text style={themedStyles.spotRating}>{spot.rating}</Text>
-        </View>
-      </View>
+
       <TouchableOpacity
         style={[
           themedStyles.reserveButton,
           {
             backgroundColor: spot.isBookedByUser
-              ? "#2196F3"
+              ? "#007AFF"
               : !spot.canBook && !spot.isBookedByUser
-              ? "#9E9E9E"
-              : themedStyles.reserveButton.backgroundColor,
+              ? "#8E8E93"
+              : "#10B981",
           },
         ]}
         onPress={() => {
@@ -1049,53 +965,69 @@ const SmartParkingHome = ({ navigation }) => {
         }}
         disabled={!spot.canBook && !spot.isBookedByUser}
       >
-        <Text style={themedStyles.reserveButtonText}>
+        <Text style={themedStyles.reserveText}>
           {spot.isBookedByUser
             ? "View Booking"
             : !spot.canBook && !spot.isBookedByUser
             ? "Unavailable"
-            : "Reserve"}
+            : "Reserve Now"}
         </Text>
       </TouchableOpacity>
     </View>
   );
-  };
 
   const AvailableSpots = () => (
-    <View style={themedStyles.nearbySection}>
+    <>
       <View style={themedStyles.sectionHeader}>
-        <Ionicons name="car-outline" size={24} color="#10B981" />
-        <Text style={themedStyles.sectionTitle}>Available Slots</Text>
+        <Ionicons name="location-sharp" size={28} color="#10B981" />
+        <Text style={themedStyles.sectionTitle}>Available Spots</Text>
       </View>
-      {parkingSpots.length > 0 ? (
-        parkingSpots.map((spot) => (
-          <ParkingSpotCard key={spot.id} spot={spot} />
-        ))
-      ) : (
-        <View style={themedStyles.offlineMessage}>
-          <Ionicons name="wifi-outline" size={48} color="#666" />
-          <Text style={themedStyles.offlineText}>IoT System Offline</Text>
-          <Text style={themedStyles.offlineSubtext}>
-            Connect ESP32 to see real-time parking data
-          </Text>
-        </View>
-      )}
-    </View>
+      <View style={themedStyles.spotsContainer}>
+        {parkingSpots.length > 0 ? (
+          parkingSpots.map((spot) => (
+            <ParkingSpotCard key={spot.id} spot={spot} />
+          ))
+        ) : (
+          <View style={themedStyles.offlineCard}>
+            <View style={themedStyles.offlineIcon}>
+              <Ionicons
+                name="wifi-outline"
+                size={36}
+                color={isDark ? "#48484A" : "#C6C6C8"}
+              />
+            </View>
+            <Text style={themedStyles.offlineTitle}>IoT System Offline</Text>
+            <Text style={themedStyles.offlineDesc}>
+              Connect your ESP32 sensors to see real-time parking availability
+            </Text>
+          </View>
+        )}
+      </View>
+    </>
   );
 
   const FeaturesSection = () => (
     <View style={themedStyles.featuresSection}>
-      <Text style={themedStyles.sectionTitle}>Why Choose Smart Parking?</Text>
+      <View style={themedStyles.sectionHeader}>
+        <Ionicons name="sparkles" size={28} color="#10B981" />
+        <Text style={themedStyles.sectionTitle}>Why Smart Parking?</Text>
+      </View>
       <View style={themedStyles.featuresGrid}>
         {[
-          ["flash-outline", "Real-time", "Live spot updates"],
-          ["shield-checkmark-outline", "Secure", "Safe & reliable"],
-          ["phone-portrait-outline", "Easy", "One-tap booking"],
-        ].map(([icon, title, desc], i) => (
+          { icon: "flash", title: "Real-time", desc: "Live updates" },
+          {
+            icon: "shield-checkmark",
+            title: "Secure",
+            desc: "Safe & reliable",
+          },
+          { icon: "phone-portrait", title: "Easy", desc: "One-tap booking" },
+        ].map((feature, i) => (
           <View key={i} style={themedStyles.featureCard}>
-            <Ionicons name={icon} size={32} color="#10B981" />
-            <Text style={themedStyles.featureTitle}>{title}</Text>
-            <Text style={themedStyles.featureDesc}>{desc}</Text>
+            <View style={themedStyles.featureIcon}>
+              <Ionicons name={feature.icon} size={24} color="#10B981" />
+            </View>
+            <Text style={themedStyles.featureTitle}>{feature.title}</Text>
+            <Text style={themedStyles.featureDesc}>{feature.desc}</Text>
           </View>
         ))}
       </View>
@@ -1106,7 +1038,7 @@ const SmartParkingHome = ({ navigation }) => {
     <SafeAreaView style={themedStyles.container}>
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={isDark ? "#121212" : "#fff"}
+        backgroundColor={isDark ? "#000000" : "#F5F5F7"}
       />
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1116,77 +1048,18 @@ const SmartParkingHome = ({ navigation }) => {
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={["#10B981"]}
-            tintColor={isDark ? "#10B981" : "#10B981"}
+            tintColor="#10B981"
+            progressBackgroundColor={isDark ? "#1C1C1E" : "#FFFFFF"}
           />
         }
       >
-        {/* Header Section with wallet balance button */}
-        <View style={themedStyles.header}>
-          <Text style={themedStyles.title}>Smart Parking</Text>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            {/* Location Search Button */}
-            <TouchableOpacity
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 8,
-                paddingVertical: 6,
-                borderRadius: 8,
-                backgroundColor: isDark ? "#333" : "#F0F0F0",
-                marginRight: 10,
-              }}
-              onPress={() => {
-                setShowSearchModal(true);
-              }}
-            >
-              <Ionicons name="search-outline" size={20} color="#10B981" />
-            </TouchableOpacity>
-
-            {/* Wallet Balance Button */}
-          <TouchableOpacity
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              borderRadius: 10,
-              backgroundColor:
-                  Number(wallet.balance || 0) < 0 ? "#FF4444" : "#10B981",
-            }}
-            onPress={() => navigation.navigate("TopUp")}
-          >
-            <Text
-              style={{
-                color: "#fff",
-                fontWeight: "900",
-                fontSize: 16,
-                marginRight: 8,
-              }}
-            >
-              ${Number(wallet.balance || 0).toFixed(2)}
-            </Text>
-            <Ionicons
-              name={
-                Number(wallet.balance || 0) < 0
-                  ? "warning-outline"
-                  : "add-circle-outline"
-              }
-              size={18}
-              color="#fff"
-            />
-          </TouchableOpacity>
-          </View>
-        </View>
-        <WelcomeSection />
-
-        {/* Wallet Card removed per request; balance is shown in header */}
-        <StatsCards />
+        <Header />
+        <HeroSection />
+        <StatsCard />
         <AvailableSpots />
         <FeaturesSection />
-        <View style={themedStyles.bottomSpacing} />
       </ScrollView>
 
-      {/* Location Search Modal */}
       <Modal
         visible={showSearchModal}
         transparent={true}
@@ -1202,28 +1075,26 @@ const SmartParkingHome = ({ navigation }) => {
             style={themedStyles.modalContent}
             onStartShouldSetResponder={() => true}
           >
-            {/* iOS-style handle */}
             <View style={themedStyles.modalHandle} />
 
-            {/* Title and Subtitle */}
-            <Text style={themedStyles.modalTitle}>Search Location</Text>
-            <Text style={themedStyles.modalSubtitle}>
-              Find available parking slots by location
-            </Text>
+            <View style={themedStyles.modalHeader}>
+              <Text style={themedStyles.modalTitle}>Search Location</Text>
+              <Text style={themedStyles.modalSubtitle}>
+                Find available parking slots by location
+              </Text>
+            </View>
 
-            {/* Search Input */}
-            <TextInput
-              style={themedStyles.searchInput}
-              placeholder="Search (e.g., Jason Moyo, Nelson Mandela)"
-              placeholderTextColor={
-                isDark ? "rgba(255, 255, 255, 0.5)" : "rgba(0, 0, 0, 0.5)"
-              }
-              value={searchLocation}
-              onChangeText={setSearchLocation}
-              autoFocus={false}
-            />
+            <View style={themedStyles.searchInputContainer}>
+              <TextInput
+                style={themedStyles.searchInput}
+                placeholder="e.g., Jason Moyo, Nelson Mandela"
+                placeholderTextColor={isDark ? "#8E8E93" : "#8E8E93"}
+                value={searchLocation}
+                onChangeText={setSearchLocation}
+                autoFocus={false}
+              />
+            </View>
 
-            {/* Results */}
             {searchLocation && (
               <ScrollView
                 style={themedStyles.modalSlotsContainer}
@@ -1239,7 +1110,7 @@ const SmartParkingHome = ({ navigation }) => {
                         setSearchLocation("");
                       }}
                     >
-                      <Text style={themedStyles.modalSlotLocation}>
+                      <Text style={themedStyles.modalSlotStreet}>
                         {getStreetName(spot.name)}
                       </Text>
                       <Text style={themedStyles.modalSlotName}>
@@ -1252,14 +1123,14 @@ const SmartParkingHome = ({ navigation }) => {
                               ? "checkmark-circle"
                               : "close-circle"
                           }
-                          size={18}
-                          color={spot.isAvailable ? "#34C759" : "#FF3B30"}
+                          size={22}
+                          color={spot.isAvailable ? "#34C759" : "#FF453A"}
                         />
                         <Text
                           style={[
                             themedStyles.modalSlotStatusText,
                             {
-                              color: spot.isAvailable ? "#34C759" : "#FF3B30",
+                              color: spot.isAvailable ? "#34C759" : "#FF453A",
                             },
                           ]}
                         >
@@ -1269,42 +1140,16 @@ const SmartParkingHome = ({ navigation }) => {
                     </TouchableOpacity>
                   ))
                 ) : (
-                  <View
-                    style={{
-                      padding: 40,
-      alignItems: "center",
-                    }}
-                  >
-                    <Ionicons
-                      name="search-outline"
-                      size={48}
-                      color={
-                        isDark
-                          ? "rgba(255, 255, 255, 0.3)"
-                          : "rgba(0, 0, 0, 0.3)"
-                      }
-                    />
-                    <Text
-                      style={{
-                        color: isDark
-                          ? "rgba(255, 255, 255, 0.6)"
-                          : "rgba(0, 0, 0, 0.6)",
-      fontSize: 16,
-                        marginTop: 12,
-      fontWeight: "500",
-                      }}
-                    >
-                      No slots found
-                    </Text>
-                    <Text
-                      style={{
-                        color: isDark
-                          ? "rgba(255, 255, 255, 0.5)"
-                          : "rgba(0, 0, 0, 0.5)",
-      fontSize: 14,
-                        marginTop: 4,
-                      }}
-                    >
+                  <View style={themedStyles.emptyState}>
+                    <View style={themedStyles.emptyIcon}>
+                      <Ionicons
+                        name="search-outline"
+                        size={32}
+                        color={isDark ? "#48484A" : "#C6C6C8"}
+                      />
+                    </View>
+                    <Text style={themedStyles.emptyTitle}>No slots found</Text>
+                    <Text style={themedStyles.emptyDesc}>
                       Try another location
                     </Text>
                   </View>
@@ -1312,13 +1157,15 @@ const SmartParkingHome = ({ navigation }) => {
               </ScrollView>
             )}
 
-            {/* Side-by-side Buttons */}
-            <View style={themedStyles.modalButtonsContainer}>
+            <View style={themedStyles.modalButtons}>
               <TouchableOpacity
                 onPress={searchSlotsByLocation}
-                style={themedStyles.modalSearchButton}
+                style={[
+                  themedStyles.modalButton,
+                  { backgroundColor: "#10B981" },
+                ]}
               >
-                <Text style={themedStyles.modalSearchButtonText}>Search</Text>
+                <Text style={themedStyles.modalButtonText}>Search</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1326,9 +1173,12 @@ const SmartParkingHome = ({ navigation }) => {
                   setShowSearchModal(false);
                   setSearchLocation("");
                 }}
-                style={themedStyles.modalCloseButton}
+                style={[
+                  themedStyles.modalButton,
+                  { backgroundColor: "#FF453A" },
+                ]}
               >
-                <Text style={themedStyles.modalCloseButtonText}>Close</Text>
+                <Text style={themedStyles.modalButtonText}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>

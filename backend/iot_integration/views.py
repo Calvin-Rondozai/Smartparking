@@ -49,6 +49,154 @@ def check_unauthorized_parking(spot):
         print(f"Error checking unauthorized parking: {e}")
 
 
+def check_grace_period_expiration():
+    """Check for all bookings with expired grace periods and cancel them (like mobile app)"""
+    try:
+        from parking_app.models import Booking
+        from chatbot.views import send_whatsapp_message
+
+        now = timezone.now()
+        # Hardcoded number for proof of concept
+        test_phone = "+263713291359"
+
+        # Find all active bookings with grace period started but timer not started yet
+        # These are bookings in the grace period
+        grace_period_bookings = Booking.objects.filter(
+            status="active",
+            grace_period_started__isnull=False,
+            timer_started__isnull=True,  # Timer hasn't started yet
+            grace_period_ended__isnull=True,  # Grace period hasn't been marked as ended
+        ).select_related("user", "parking_spot")
+
+        cancelled_count = 0
+        for booking in grace_period_bookings:
+            # Check if grace period has expired (20 seconds - same as mobile app)
+            if booking.grace_period_started:
+                grace_elapsed = (now - booking.grace_period_started).total_seconds()
+
+                if grace_elapsed > 20:
+                    # Grace period expired - cancel booking (exactly like mobile app detect_car_parked)
+                    print(
+                        f"❌ [Grace Period] Expired for booking {booking.id} (user: {booking.user.username}) - {grace_elapsed:.1f}s elapsed. Cancelling booking."
+                    )
+
+                    slot_name = booking.parking_spot.spot_number
+
+                    # Cancel the booking (same as mobile app detect_car_parked endpoint)
+                    booking.status = "cancelled"
+                    booking.grace_period_ended = now
+                    booking.save(update_fields=["status", "grace_period_ended"])
+
+                    # Free up the parking spot (same as mobile app)
+                    if booking.parking_spot:
+                        spot = booking.parking_spot
+                        spot.is_occupied = False
+                        spot.save(update_fields=["is_occupied"])
+                        print(
+                            f"✅ Freed up parking spot {spot.spot_number} after grace period expired"
+                        )
+
+                    # Turn off LED (same as mobile app)
+                    try:
+                        from parking_app.views import trigger_esp32_booking_led
+
+                        trigger_esp32_booking_led(slot_name, False)
+                    except Exception as e:
+                        print(f"⚠️ Error turning off LED: {e}")
+
+                    # Clear device metadata
+                    try:
+                        from iot_integration.models import IoTDevice
+
+                        device = IoTDevice.objects.filter(device_type="sensor").first()
+                        if device:
+                            metadata = device.metadata or {}
+                            if slot_name == "Slot A":
+                                metadata["slot1_booked"] = False
+                                metadata["slot1_led_state"] = "off"
+                            elif slot_name == "Slot B":
+                                metadata["slot2_booked"] = False
+                                metadata["slot2_led_state"] = "off"
+                            device.metadata = metadata
+                            device.save(update_fields=["metadata"])
+                    except Exception as e:
+                        print(f"⚠️ Error clearing metadata: {e}")
+
+                    # Send WhatsApp notification (proof of concept: always use hardcoded number)
+                    is_whatsapp_user = booking.user.username.startswith("whatsapp_")
+                    print(
+                        f"🔍 [Grace Period] Booking {booking.id} - username: '{booking.user.username}', is_whatsapp_user: {is_whatsapp_user}"
+                    )
+
+                    # Proof of concept: Always use hardcoded test phone number
+                    phone_to_use = test_phone
+                    print(
+                        f"📱 [Grace Period] Using hardcoded test phone for proof of concept: {phone_to_use}"
+                    )
+
+                    # Send notification (always send for proof of concept)
+                    if phone_to_use:
+
+                        # Format slot name for display
+                        if slot_name == "Slot A":
+                            display_slot = "Jason Moyo Ave (Slot A)"
+                        elif slot_name == "Slot B":
+                            display_slot = "Nelson Mandela Ave (Slot B)"
+                        else:
+                            display_slot = slot_name
+
+                        message = (
+                            f"❌ Booking Cancelled\n\n"
+                            f"📍 Slot: {display_slot}\n"
+                            f"⏱️ Your 20-second grace period has expired.\n"
+                            f"🚗 Your car was not detected within the grace period.\n\n"
+                            f"Your booking has been cancelled. Please book again when you're ready to park."
+                        )
+
+                        print(
+                            f"📱 [Grace Period] Attempting to send WhatsApp notification to {phone_to_use} for booking {booking.id}"
+                        )
+                        print(f"📱 [Grace Period] Message preview: {message[:100]}...")
+
+                        try:
+                            result = send_whatsapp_message(phone_to_use, message)
+                            if result:
+                                print(
+                                    f"✅ [Grace Period] Cancellation notification sent successfully for booking {booking.id} to {phone_to_use}"
+                                )
+                            else:
+                                print(
+                                    f"❌ [Grace Period] Failed to send cancellation notification - send_whatsapp_message returned False for booking {booking.id} to {phone_to_use}"
+                                )
+                                print(
+                                    f"❌ [Grace Period] Check Twilio credentials and phone number format"
+                                )
+                        except Exception as e:
+                            print(
+                                f"❌ [Grace Period] Exception while sending WhatsApp notification to {phone_to_use}: {e}"
+                            )
+                            import traceback
+
+                            traceback.print_exc()
+                    else:
+                        print(
+                            f"ℹ️ [Grace Period] Booking {booking.id} - No phone number found for user '{booking.user.username}', skipping WhatsApp notification"
+                        )
+
+                    cancelled_count += 1
+
+        if cancelled_count > 0:
+            print(
+                f"✅ [Grace Period] Cancelled {cancelled_count} booking(s) due to expired grace period"
+            )
+
+    except Exception as e:
+        print(f"⚠️ Error checking grace period expiration: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+
 def _auto_complete_booking_for_slot(spot_number):
     """Auto-complete active booking when IoT detects car left the slot"""
     try:
@@ -70,6 +218,12 @@ def _auto_complete_booking_for_slot(spot_number):
 
         # Calculate final cost based on actual parked duration
         now = timezone.now()
+
+        # Ensure timer_started exists (should always exist if we got here, but safety check)
+        if not booking.timer_started:
+            booking.timer_started = booking.start_time or now
+            booking.save(update_fields=["timer_started"])
+
         elapsed_seconds = max(0, int((now - booking.timer_started).total_seconds()))
 
         # Calculate cost at $1 per 30 seconds
@@ -78,45 +232,177 @@ def _auto_complete_booking_for_slot(spot_number):
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
 
-        # Update booking (keep slot occupied until manually freed)
+        # Calculate parking duration for receipt
+        duration_minutes = elapsed_seconds // 60
+        duration_remaining_seconds = elapsed_seconds % 60
+        duration_hours = duration_minutes // 60
+        duration_remaining_minutes = duration_minutes % 60
+
+        # Format duration string
+        if duration_hours > 0:
+            duration_str = f"{duration_hours}h {duration_remaining_minutes}m {duration_remaining_seconds}s"
+        elif duration_minutes > 0:
+            duration_str = f"{duration_minutes}m {duration_remaining_seconds}s"
+        else:
+            duration_str = f"{duration_remaining_seconds}s"
+
+        # Deduct from wallet BEFORE marking as completed
+        try:
+            from parking_app.views import deduct_from_wallet
+            from parking_app.models import UserProfile
+
+            # Get current balance before deduction
+            profile, _ = UserProfile.objects.get_or_create(user=booking.user)
+            old_balance = profile.balance or Decimal("0.00")
+
+            # Deduct final cost from wallet
+            deduction_result = deduct_from_wallet(
+                user=booking.user,
+                booking=booking,
+                amount=final_cost,
+                note=f"Parking charge - {duration_str} at $1/30s",
+            )
+
+            # Get new balance after deduction
+            profile.refresh_from_db()
+            new_balance = profile.balance or Decimal("0.00")
+
+            print(
+                f"💳 [Auto-complete] Deducted ${final_cost} from wallet for booking {booking.id}"
+            )
+            print(f"💳 [Auto-complete] Balance: ${old_balance} → ${new_balance}")
+        except Exception as e:
+            print(f"⚠️ [Auto-complete] Error deducting from wallet: {e}")
+            import traceback
+
+            traceback.print_exc()
+            # Continue even if wallet deduction fails
+
+        # Update booking and free up the slot IMMEDIATELY (priority: speed)
+        slot_number = booking.parking_spot.spot_number
+
+        # Mark booking as completed FIRST (so active_bookings endpoint immediately excludes it)
         booking.total_cost = float(final_cost)
         booking.status = "completed"
         booking.end_time = now  # Set actual end time
         booking.completed_at = now  # Set completion timestamp
-        booking.save()
+        booking.duration_minutes = duration_minutes  # Store duration in minutes
+        booking.save(
+            update_fields=[
+                "total_cost",
+                "status",
+                "end_time",
+                "completed_at",
+                "duration_minutes",
+            ]
+        )
 
-        # Turn off LED
+        # Free up the parking spot immediately
+        try:
+            if booking.parking_spot:
+                spot = booking.parking_spot
+                spot.is_occupied = False
+                spot.save(update_fields=["is_occupied"])
+                print(
+                    f"✅ Freed up parking spot {spot.spot_number} after IoT detected car left"
+                )
+            else:
+                print(f"⚠️ Booking {booking.id} has no parking_spot assigned")
+        except Exception as e:
+            print(f"❌ ERROR: Failed to free up parking spot: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+        # Clear booking state in device metadata immediately (ESP32 reads this on next poll)
+        try:
+            from iot_integration.models import IoTDevice
+
+            device = IoTDevice.objects.filter(device_type="sensor").first()
+            if device:
+                metadata = device.metadata or {}
+                if slot_number == "Slot A":
+                    metadata["slot1_booked"] = False
+                    metadata["slot1_led_state"] = "off"
+                elif slot_number == "Slot B":
+                    metadata["slot2_booked"] = False
+                    metadata["slot2_led_state"] = "off"
+                device.metadata = metadata
+                device.save(update_fields=["metadata"])
+                print(
+                    f"✅ Cleared booking state in metadata for {slot_number} (immediate)"
+                )
+        except Exception as e:
+            print(f"⚠️ Error clearing metadata: {e}")
+
+        # Trigger LED notification (non-blocking)
         try:
             from parking_app.views import trigger_esp32_booking_led
 
-            trigger_esp32_booking_led(booking.parking_spot.spot_number, False)
+            trigger_esp32_booking_led(slot_number, False)
         except Exception as e:
-            print(f"Error turning off LED: {e}")
+            print(f"⚠️ LED notification error: {e}")
 
-        # Send WhatsApp notification when IoT detects car left
+        # WhatsApp notification: Send receipt when car leaves (for all bookings)
+        # Proof of concept: Send to hardcoded number +263713291359
         try:
             from chatbot.views import send_whatsapp_message
             from parking_app.models import UserProfile
 
-            profile = UserProfile.objects.filter(user=booking.user).first()
-            if profile and profile.phone:
-                slot_name = booking.parking_spot.spot_number
-                duration_minutes = elapsed_seconds // 60
-                duration_seconds = elapsed_seconds % 60
-                message = (
-                    f"🚗 You left the slot!\n\n"
-                    f"📍 Slot: {slot_name}\n"
-                    f"⏱️ Duration: {duration_minutes}m {duration_seconds}s\n"
-                    f"💰 Amount charged: ${float(final_cost):.2f}\n\n"
-                    f"✅ Payment successful!\n"
-                    f"Thank you for using Smart Parking! 🚗"
+            # Hardcoded number for proof of concept
+            test_phone = "+263713291359"
+
+            # Format slot name for display
+            slot_name = booking.parking_spot.spot_number
+            if slot_name == "Slot A":
+                display_slot = "Jason Moyo Ave (Slot A)"
+            elif slot_name == "Slot B":
+                display_slot = "Nelson Mandela Ave (Slot B)"
+            else:
+                display_slot = slot_name
+
+            # Get final balance after deduction
+            try:
+                profile = UserProfile.objects.get(user=booking.user)
+                final_balance = float(profile.balance or 0)
+            except:
+                final_balance = 0.00
+
+            # Format receipt message
+            message = (
+                f"📋 Parking Receipt\n\n"
+                f"📍 Slot: {display_slot}\n"
+                f"🕐 Parking Duration: {duration_str}\n"
+                f"💰 Total Cost: ${final_cost:.2f}\n"
+                f"💳 Wallet Balance: ${final_balance:.2f}\n\n"
+                f"✅ Thank you for using Smart Parking!\n"
+                f"🚗 Drive safely!"
+            )
+
+            print(
+                f"📱 [Auto-complete] Sending receipt notification to {test_phone} for booking {booking.id}"
+            )
+            print(
+                f"📱 [Auto-complete] Receipt details: Duration={duration_str}, Cost=${final_cost:.2f}"
+            )
+
+            result = send_whatsapp_message(test_phone, message)
+            if result:
+                print(
+                    f"✅ [Auto-complete] Receipt notification sent successfully for booking {booking.id}!"
                 )
-                send_whatsapp_message(profile.phone, message)
+            else:
+                print(
+                    f"⚠️ [Auto-complete] Receipt notification failed to send for booking {booking.id}"
+                )
         except Exception as e:
-            print(f"⚠️ Failed to send WhatsApp notification: {e}")
+            print(f"⚠️ [Auto-complete] Error sending receipt notification: {e}")
+            import traceback
+
+            traceback.print_exc()
 
         print(
-            f"✅ Booking {booking.id} completed - Duration: {elapsed_seconds}s, Cost: ${final_cost}"
+            f"✅ Booking {booking.id} completed - Duration: {duration_str}, Cost: ${final_cost:.2f}"
         )
 
     except Exception as e:
@@ -203,6 +489,9 @@ def sensor_data(request):
             # If dual sensor fields don't exist, skip them
             pass
 
+        # Check for expired grace periods (for WhatsApp bookings)
+        check_grace_period_expiration()
+
         # Update parking spots based on dual sensor data
         from parking_app.models import ParkingLot, ParkingSpot
 
@@ -224,8 +513,112 @@ def sensor_data(request):
                         f"Updated Slot A: {'Occupied' if slot1_occupied else 'Available'}"
                     )
 
+                    # Detect car parked: Slot transition from Available → Occupied
+                    if not was_occupied and slot1_occupied:
+                        # Slot just became occupied - check for active booking and notify user
+                        print(f"🔍 [Slot A] Detected transition: Available → Occupied")
+                        try:
+                            from parking_app.models import Booking
+                            from chatbot.views import send_whatsapp_message
+
+                            # Check for active booking (including those with grace period)
+                            active_booking = Booking.objects.filter(
+                                parking_spot=slot_a, status="active"
+                            ).first()
+
+                            if active_booking:
+                                print(
+                                    f"🔍 [Slot A] Found active booking {active_booking.id} for user {active_booking.user.username}"
+                                )
+
+                                # Start the timer if it hasn't been started yet
+                                now = timezone.now()
+                                timer_was_started = (
+                                    active_booking.timer_started is not None
+                                )
+
+                                if not active_booking.timer_started:
+                                    # Car just parked - start the timer
+                                    active_booking.timer_started = now
+                                    if active_booking.grace_period_started:
+                                        active_booking.grace_period_ended = now
+                                    active_booking.last_billing_at = now
+                                    active_booking.save(
+                                        update_fields=[
+                                            "timer_started",
+                                            "grace_period_ended",
+                                            "last_billing_at",
+                                        ]
+                                    )
+                                    print(
+                                        f"⏰ [Slot A] Timer started for booking {active_booking.id} - Car detected!"
+                                    )
+
+                                    # Format slot name for display
+                                    slot_name = slot_a.spot_number
+                                    if slot_name == "Slot A":
+                                        display_slot = "Jason Moyo Ave (Slot A)"
+                                    elif slot_name == "Slot B":
+                                        display_slot = "Nelson Mandela Ave (Slot B)"
+                                    else:
+                                        display_slot = slot_name
+
+                                    # Send WhatsApp notification to all bookings (proof of concept)
+                                    # Hardcoded number for proof of concept
+                                    test_phone = "+263713291359"
+
+                                    message = (
+                                        f"✅ Car Parked Successfully!\n\n"
+                                        f"📍 Slot: {display_slot}\n"
+                                        f"🚗 Your car has been detected.\n"
+                                        f"⏰ Parking timer has started.\n"
+                                        f"💰 You'll be charged $1 per 30 seconds.\n\n"
+                                        f"Thank you for using Smart Parking! 🚗"
+                                    )
+
+                                    print(
+                                        f"📱 [Slot A] Sending parking notification to {test_phone} for booking {active_booking.id}"
+                                    )
+
+                                    try:
+                                        result = send_whatsapp_message(
+                                            test_phone, message
+                                        )
+                                        if result:
+                                            print(
+                                                f"✅ [Slot A] Parking notification sent successfully!"
+                                            )
+                                        else:
+                                            print(
+                                                f"⚠️ [Slot A] Parking notification failed to send"
+                                            )
+                                    except Exception as e:
+                                        print(
+                                            f"⚠️ [Slot A] Error sending parking notification: {e}"
+                                        )
+                                        import traceback
+
+                                        traceback.print_exc()
+                                else:
+                                    print(
+                                        f"ℹ️ [Slot A] Timer already started for booking {active_booking.id} (car was already detected)"
+                                    )
+                            else:
+                                print(
+                                    f"ℹ️ [Slot A] No active booking found - unauthorized parking detected"
+                                )
+                                # Check for unauthorized parking
+                                check_unauthorized_parking(slot_a)
+                        except Exception as e:
+                            print(f"⚠️ [Slot A] Error processing car detection: {e}")
+                            import traceback
+
+                            traceback.print_exc()
+
                     # Auto-complete booking if slot became free and there's an active booking
+                    # LED changed from red to green (car left) - release slot and notify
                     if was_occupied and not slot1_occupied:
+                        # Auto-complete booking (this will free the slot and send WhatsApp notification for WhatsApp bookings)
                         _auto_complete_booking_for_slot("Slot A")
 
                 except ParkingSpot.DoesNotExist:
@@ -244,8 +637,112 @@ def sensor_data(request):
                         f"Updated Slot B: {'Occupied' if slot2_occupied else 'Available'}"
                     )
 
+                    # Detect car parked: Slot transition from Available → Occupied
+                    if not was_occupied and slot2_occupied:
+                        # Slot just became occupied - check for active booking and notify user
+                        print(f"🔍 [Slot B] Detected transition: Available → Occupied")
+                        try:
+                            from parking_app.models import Booking
+                            from chatbot.views import send_whatsapp_message
+
+                            # Check for active booking (including those with grace period)
+                            active_booking = Booking.objects.filter(
+                                parking_spot=slot_b, status="active"
+                            ).first()
+
+                            if active_booking:
+                                print(
+                                    f"🔍 [Slot B] Found active booking {active_booking.id} for user {active_booking.user.username}"
+                                )
+
+                                # Start the timer if it hasn't been started yet
+                                now = timezone.now()
+                                timer_was_started = (
+                                    active_booking.timer_started is not None
+                                )
+
+                                if not active_booking.timer_started:
+                                    # Car just parked - start the timer
+                                    active_booking.timer_started = now
+                                    if active_booking.grace_period_started:
+                                        active_booking.grace_period_ended = now
+                                    active_booking.last_billing_at = now
+                                    active_booking.save(
+                                        update_fields=[
+                                            "timer_started",
+                                            "grace_period_ended",
+                                            "last_billing_at",
+                                        ]
+                                    )
+                                    print(
+                                        f"⏰ [Slot B] Timer started for booking {active_booking.id} - Car detected!"
+                                    )
+
+                                    # Format slot name for display
+                                    slot_name = slot_b.spot_number
+                                    if slot_name == "Slot A":
+                                        display_slot = "Jason Moyo Ave (Slot A)"
+                                    elif slot_name == "Slot B":
+                                        display_slot = "Nelson Mandela Ave (Slot B)"
+                                    else:
+                                        display_slot = slot_name
+
+                                    # Send WhatsApp notification to all bookings (proof of concept)
+                                    # Hardcoded number for proof of concept
+                                    test_phone = "+263713291359"
+
+                                    message = (
+                                        f"✅ Car Parked Successfully!\n\n"
+                                        f"📍 Slot: {display_slot}\n"
+                                        f"🚗 Your car has been detected.\n"
+                                        f"⏰ Parking timer has started.\n"
+                                        f"💰 You'll be charged $1 per 30 seconds.\n\n"
+                                        f"Thank you for using Smart Parking! 🚗"
+                                    )
+
+                                    print(
+                                        f"📱 [Slot B] Sending parking notification to {test_phone} for booking {active_booking.id}"
+                                    )
+
+                                    try:
+                                        result = send_whatsapp_message(
+                                            test_phone, message
+                                        )
+                                        if result:
+                                            print(
+                                                f"✅ [Slot B] Parking notification sent successfully!"
+                                            )
+                                        else:
+                                            print(
+                                                f"⚠️ [Slot B] Parking notification failed to send"
+                                            )
+                                    except Exception as e:
+                                        print(
+                                            f"⚠️ [Slot B] Error sending parking notification: {e}"
+                                        )
+                                        import traceback
+
+                                        traceback.print_exc()
+                                else:
+                                    print(
+                                        f"ℹ️ [Slot B] Timer already started for booking {active_booking.id} (car was already detected)"
+                                    )
+                            else:
+                                print(
+                                    f"ℹ️ [Slot B] No active booking found - unauthorized parking detected"
+                                )
+                                # Check for unauthorized parking
+                                check_unauthorized_parking(slot_b)
+                        except Exception as e:
+                            print(f"⚠️ [Slot B] Error processing car detection: {e}")
+                            import traceback
+
+                            traceback.print_exc()
+
                     # Auto-complete booking if slot became free and there's an active booking
+                    # LED changed from red to green (car left) - release slot and notify
                     if was_occupied and not slot2_occupied:
+                        # Auto-complete booking (this will free the slot and send WhatsApp notification for WhatsApp bookings)
                         _auto_complete_booking_for_slot("Slot B")
 
                 except ParkingSpot.DoesNotExist:
@@ -568,7 +1065,18 @@ def control_esp32_booking(request):
     try:
         device_id = request.data.get("device_id")
         slot_number = request.data.get("slot_number")  # 'Slot A' or 'Slot B'
-        is_booked = request.data.get("is_booked", False)
+        led_state = request.data.get("led_state")
+        is_booked = request.data.get("is_booked")
+
+        # Determine is_booked from led_state if not provided
+        if is_booked is None:
+            if led_state == "blue":
+                is_booked = True
+            elif led_state == "off" or led_state is False:
+                is_booked = False
+            else:
+                # Default to True for red (overtime) or other states
+                is_booked = True
 
         if not device_id or not slot_number:
             return Response(
@@ -588,16 +1096,20 @@ def control_esp32_booking(request):
         metadata = device.metadata or {}
         if slot_number == "Slot A":
             metadata["slot1_booked"] = is_booked
+            if led_state:
+                metadata["slot1_led_state"] = led_state
         elif slot_number == "Slot B":
             metadata["slot2_booked"] = is_booked
+            if led_state:
+                metadata["slot2_led_state"] = led_state
 
         device.metadata = metadata
         device.save()
 
         DeviceLog.objects.create(
             device=device,
-            log_type="booking_control",
-            message=f'Booking state updated: {slot_number} = {"Booked" if is_booked else "Available"}',
+            log_type="info",
+            message=f'Booking state updated: {slot_number} = {"Booked" if is_booked else "Available"} (LED: {led_state or "N/A"})',
         )
 
         return Response(
@@ -605,11 +1117,37 @@ def control_esp32_booking(request):
                 "message": f"{slot_number} booking state updated successfully",
                 "slot_number": slot_number,
                 "is_booked": is_booked,
+                "led_state": led_state,
             },
             status=status.HTTP_200_OK,
         )
 
     except Exception as e:
+        import traceback
+
+        error_trace = traceback.format_exc()
+        print(f"❌ ESP32 LED control error: {e}")
+        print(f"Traceback: {error_trace}")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST", "GET"])
+@permission_classes([AllowAny])
+def check_grace_periods(request):
+    """Check and cancel bookings with expired grace periods (like mobile app detect_car_parked)"""
+    try:
+        # Call the grace period check function
+        check_grace_period_expiration()
+
+        return Response(
+            {"message": "Grace period check completed", "status": "success"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        print(f"⚠️ Error in check_grace_periods endpoint: {e}")
+        import traceback
+
+        traceback.print_exc()
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -620,12 +1158,23 @@ def active_bookings(request):
     try:
         from parking_app.models import Booking
         from django.utils import timezone
+        from django.db.models import Q, F
 
         now = timezone.now()
 
-        active_bookings_qs = Booking.objects.filter(
-            start_time__lte=now, end_time__gte=now, status="active"
-        ).select_related("parking_spot", "user")
+        # Include bookings that are active and either:
+        # 1. Have a future end_time (fixed duration bookings)
+        # 2. Have end_time == start_time (pay-per-use bookings that haven't ended)
+        # Use select_for_update(nowait=True) to avoid stale reads, or just ensure fresh query
+        active_bookings_qs = (
+            Booking.objects.filter(
+                Q(start_time__lte=now)
+                & (Q(end_time__gte=now) | Q(end_time=F("start_time"))),
+                status="active",
+            )
+            .select_related("parking_spot", "user")
+            .order_by("id")
+        )
 
         bookings_data = []
         for booking in active_bookings_qs:
@@ -671,14 +1220,24 @@ def active_bookings(request):
                 }
             )
 
-        return Response(
-            {
-                "bookings": bookings_data,
-                "total_active": len(bookings_data),
-                "timestamp": now.isoformat(),
-            },
-            status=status.HTTP_200_OK,
-        )
+        result = {
+            "bookings": bookings_data,
+            "total_active": len(bookings_data),
+            "timestamp": now.isoformat(),
+        }
+
+        # Debug logging
+        if bookings_data:
+            print(
+                f"📋 Active bookings endpoint: Found {len(bookings_data)} active booking(s)"
+            )
+            for booking in bookings_data:
+                spot_num = booking.get("parking_spot", {}).get("spot_number", "Unknown")
+                print(f"  - {spot_num}: Active booking (ID: {booking.get('id')})")
+        else:
+            print(f"📋 Active bookings endpoint: No active bookings found")
+
+        return Response(result, status=status.HTTP_200_OK)
 
     except Exception as e:
         # Avoid leaking stack traces to clients; provide stable error

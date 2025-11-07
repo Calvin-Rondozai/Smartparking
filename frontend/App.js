@@ -27,7 +27,6 @@ import ChatbotScreen from "./screens/ChatbotScreen";
 import TopUpScreen from "./screens/TopUpScreen";
 import ReceiptScreen from "./screens/ReceiptScreen";
 import TermsAndConditionsScreen from "./screens/TermsAndConditionsScreen";
-import LoadingScreen from "./screens/LoadingScreen";
 
 // Theme
 import { ThemeProvider, ThemeContext } from "./ThemeContext";
@@ -111,10 +110,6 @@ function AppContent() {
       iotOvertimeService.stopMonitoring();
     };
   }, []);
-
-  if (isLoading) {
-    return <LoadingScreen />;
-  }
 
   return (
     <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>

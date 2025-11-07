@@ -42,35 +42,73 @@ def send_whatsapp_message(to_phone, message):
         auth_token = getattr(settings, "TWILIO_AUTH_TOKEN", None)
         from_number = getattr(settings, "TWILIO_WHATSAPP_NUMBER", "+14155238886")
 
+        print(f"🔍 [Twilio] Credentials check:")
+        print(
+            f"   Account SID: {account_sid[:10]}..."
+            if account_sid and len(account_sid) > 10
+            else f"   Account SID: {account_sid}"
+        )
+        print(f"   Auth Token: {'***' if auth_token else 'None'}")
+        print(f"   From Number: {from_number}")
+
         if not account_sid or not auth_token:
+            print("❌ [Twilio] Credentials not configured!")
             logger.warning(
                 "Twilio credentials not configured - cannot send WhatsApp message"
             )
             return False
 
         # Initialize Twilio client
-        client = Client(account_sid, auth_token)
+        try:
+            client = Client(account_sid, auth_token)
+            print("✅ [Twilio] Client initialized successfully")
+        except Exception as client_error:
+            print(f"❌ [Twilio] Failed to initialize client: {client_error}")
+            raise
 
         # Format phone number for WhatsApp (add whatsapp: prefix)
         if not to_phone.startswith("whatsapp:"):
+            # Clean the number
+            to_phone = to_phone.replace(" ", "").replace("-", "")
+
+            # Handle South African numbers (0713291359 -> +27713291359)
+            if to_phone.startswith("0") and len(to_phone) == 10:
+                to_phone = "27" + to_phone[1:]
+
+            # Ensure it has + prefix for international format
             if not to_phone.startswith("+"):
-                # Assume local number, try to add default country code
                 to_phone = f"+{to_phone}"
+
             to_phone = f"whatsapp:{to_phone}"
 
         # Send message
+        from_formatted = f"whatsapp:{from_number.replace('whatsapp:', '')}"
+        print(f"📱 [Twilio] Sending message:")
+        print(f"   From: {from_formatted}")
+        print(f"   To: {to_phone}")
+        print(f"   Message: {message[:100]}...")
+
         twilio_message = client.messages.create(
             body=message,
-            from_=f"whatsapp:{from_number.replace('whatsapp:', '')}",
+            from_=from_formatted,
             to=to_phone,
         )
 
+        print(f"✅ [Twilio] Message sent successfully!")
+        print(f"   Message SID: {twilio_message.sid}")
+        print(f"   Status: {twilio_message.status}")
         logger.info(
-            f"✅ WhatsApp message sent to {to_phone} - SID: {twilio_message.sid}"
+            f"✅ WhatsApp message sent to {to_phone} - SID: {twilio_message.sid}, Status: {twilio_message.status}"
         )
         return True
 
     except Exception as e:
+        print(f"❌ [Twilio] Error sending message: {e}")
+        print(f"   To: {to_phone}")
+        print(f"   From: {from_number}")
+        import traceback
+
+        traceback.print_exc()
         logger.error(f"❌ Failed to send WhatsApp message to {to_phone}: {e}")
         return False
 
@@ -297,7 +335,8 @@ def reserve_slot(request):
 
     try:
         slot_id = request.data.get("slot_id")
-        duration_minutes = int(request.data.get("duration_minutes") or 60)
+        # Duration is ignored - user pays for actual time parked (mobile app logic)
+        duration_minutes = 0
         if not slot_id:
             logger.warning(
                 f"Reserve API: slot_id missing for user {request.user.username}"
@@ -347,8 +386,10 @@ def reserve_slot(request):
         # Note: We don't check spot.is_occupied here because IoT sensor data might be stale
         # The real check is if there's an active booking (checked above)
 
+        # Create booking like mobile app: pay for actual time parked, not fixed duration
         start = timezone.now()
-        end = start + timedelta(minutes=duration_minutes)
+        # Set end_time = start_time (no fixed duration) - billing continues until car leaves
+        end = start
 
         # Get number_plate safely
         number_plate = ""
@@ -363,11 +404,11 @@ def reserve_slot(request):
             user=request.user,
             parking_spot=spot,
             start_time=start,
-            end_time=end,
-            duration_minutes=duration_minutes,
+            end_time=end,  # Same as start_time - billing based on actual parked time
+            duration_minutes=0,  # No fixed duration - pay for actual time
             status="active",
-            grace_period_started=start,  # Enable timer detection
-            timer_started=None,  # Will be set when car detected
+            grace_period_started=start,  # Enable timer detection (20 second grace period)
+            timer_started=None,  # Will be set when car detected by sensor
             number_plate=number_plate,
         )
 
@@ -513,16 +554,82 @@ def parse_whatsapp_intent(raw):
     return {"type": "unknown"}
 
 
+def format_slot_name_for_display(slot_name):
+    """
+    Format slot name for display in chatbot messages.
+    Slot A -> Jason Moyo Ave (Slot A)
+    Slot B -> Nelson Mandela Ave (Slot B)
+    Other formats remain unchanged.
+    """
+    if not slot_name:
+        return slot_name
+
+    slot_name_str = str(slot_name).strip()
+
+    # Map slot names to display format
+    slot_mapping = {
+        "Slot A": "Jason Moyo Ave (Slot A)",
+        "slot A": "Jason Moyo Ave (Slot A)",
+        "SLOT A": "Jason Moyo Ave (Slot A)",
+        "Slot B": "Nelson Mandela Ave (Slot B)",
+        "slot B": "Nelson Mandela Ave (Slot B)",
+        "SLOT B": "Nelson Mandela Ave (Slot B)",
+    }
+
+    # Check exact matches first
+    if slot_name_str in slot_mapping:
+        return slot_mapping[slot_name_str]
+
+    # Check case-insensitive partial matches
+    slot_name_lower = slot_name_str.lower()
+    if (
+        slot_name_lower == "slot a"
+        or slot_name_str.endswith("Slot A")
+        or slot_name_str.endswith("slot A")
+    ):
+        return "Jason Moyo Ave (Slot A)"
+    elif (
+        slot_name_lower == "slot b"
+        or slot_name_str.endswith("Slot B")
+        or slot_name_str.endswith("slot B")
+    ):
+        return "Nelson Mandela Ave (Slot B)"
+
+    # If no match, return original
+    return slot_name_str
+
+
 def get_whatsapp_user(from_number):
     """Get or create user for WhatsApp number"""
     from parking_app.models import UserProfile
     from django.contrib.auth.models import User
 
-    from_number_clean = from_number.replace("+", "").replace(" ", "")
+    # Clean and format phone number
+    from_number_clean = from_number.replace("+", "").replace(" ", "").replace("-", "")
+
+    # Handle South African numbers (0713291359 -> +27713291359)
+    # If starts with 0, replace with country code +27
+    if from_number_clean.startswith("0") and len(from_number_clean) == 10:
+        from_number_clean = "27" + from_number_clean[1:]
+    # Ensure it starts with country code for international format
+    if not from_number_clean.startswith("27"):
+        # If it's a 10-digit number starting with 0, assume South Africa
+        if len(from_number_clean) == 10 and from_number_clean.startswith("0"):
+            from_number_clean = "27" + from_number_clean[1:]
+        # Otherwise, assume it already has country code or add + if missing
+        if not from_number_clean.startswith("+") and len(from_number_clean) > 10:
+            from_number_clean = "+" + from_number_clean
+
     username = f"whatsapp_{from_number_clean}"
 
     try:
-        return User.objects.get(username=username)
+        user = User.objects.get(username=username)
+        # Update phone if it's missing or different
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        if not profile.phone or profile.phone != from_number_clean:
+            profile.phone = from_number_clean
+            profile.save()
+        return user
     except User.DoesNotExist:
         user = User.objects.create_user(
             username=username,
@@ -536,7 +643,7 @@ def get_whatsapp_user(from_number):
         )
         UserProfile.objects.create(
             user=user,
-            phone_number=from_number_clean,
+            phone=from_number_clean,  # Fixed: use 'phone' not 'phone_number'
             balance=100.00,
         )
         return user
@@ -585,8 +692,6 @@ def authenticate_whatsapp_user(username, password):
 
 
 @csrf_exempt
-@api_view(["GET", "POST"])
-@permission_classes([AllowAny])
 def twilio_whatsapp_webhook(request):
     """
     Twilio WhatsApp webhook endpoint - uses the same logic as mobile app chatbot.
@@ -604,6 +709,24 @@ def twilio_whatsapp_webhook(request):
     import re
 
     logger = logging.getLogger(__name__)
+
+    # Helper function to get user - defined early so call_chatbot_api can use it
+    def get_user():
+        """Get user from session or create WhatsApp user"""
+        # Get from_number from request
+        from_number = request.POST.get("From", "").replace("whatsapp:", "")
+
+        # Check if user is authenticated
+        authenticated_user_id = request.session.get("whatsapp_authenticated_user_id")
+        if authenticated_user_id:
+            try:
+                from django.contrib.auth.models import User
+
+                return User.objects.get(id=authenticated_user_id)
+            except User.DoesNotExist:
+                pass
+        # Fall back to guest user
+        return get_whatsapp_user(from_number)
 
     # Helper function to call existing chatbot APIs (same as mobile app)
     def call_chatbot_api(endpoint, method="GET", data=None, query_params=None):
@@ -706,7 +829,7 @@ def twilio_whatsapp_webhook(request):
         "en": {
             "greet": "Greetings👋! I'm Calvin, your Smart Parking assistant!",
             "menu": "What would you like to do?\n\n1️⃣ Book a slot\n2️⃣ Check current booking\n3️⃣ View booking history\n4️⃣ Search bookings by date\n5️⃣ Report an issue\n6️⃣ Help & Support\n7️⃣ Check balance\n8️⃣ Language\n9️⃣ Logout\n\nJust type the number (1-9) to select an option!\n\n💡 Tip: Type 'menu' anytime to return here!",
-            "booked": lambda slot: f'✅ Successfully booked Slot {slot}!\n\n📱 Navigate to the "Current Bookings" page to view your booking details.',
+            "booked": lambda slot: f"✅ Successfully booked {slot}!\n\n⏰ IMPORTANT: You have 20 seconds to park your vehicle.\n❌ If you don't park within 20 seconds, your booking will be cancelled automatically.",
             "expiry_warn": "⏰ Time expired before you entered the slot.",
             "left_slot": lambda amount: f"🚗 You left the slot. Amount charged: ${amount:.2f}.",
             "receipt": lambda data: f"🧾 PARKING RECEIPT\n━━━━━━━━━━━━━━━━━━━━\n📍 Slot: {data['slot']}\n🕐 Parked: {data['startTime']}\n🕑 Left: {data['endTime']}\n⏱️ Duration: {data['duration']}\n💰 Amount: ${data['amount']:.2f}\n💳 Balance: ${data['balance']:.2f}\n━━━━━━━━━━━━━━━━━━━━\n✅ Payment successful!\n\nThank you for using Smart Parking! 🚗",
@@ -722,7 +845,7 @@ def twilio_whatsapp_webhook(request):
             "booking_extended": lambda minutes: f"✅ Booking extended by {minutes} minutes!",
             "no_bookings": "📋 You have no bookings yet.",
             "no_slots": "🚫 No slots available right now.",
-            "slot_not_available": lambda slot: f"❌ Slot {slot} is not available right now.",
+            "slot_not_available": lambda slot: f"❌ {slot} is not available right now.",
             "reservation_failed": "❌ Reservation failed. Please try again.",
             "system_offline": "⚠️ Sorry, the system is currently offline. I Cannot perform action while IoT system is offline.",
             "grace_countdown": lambda seconds: f"⏳ {seconds}s remaining in grace period...",
@@ -738,7 +861,7 @@ def twilio_whatsapp_webhook(request):
         "sn": {
             "greet": "Mhoro! Ndini Calvin, mubatsiri weSmart Parking! 🤖",
             "menu": "Ungadei kuita?\n\n1️⃣ Bhuka slot\n2️⃣ Tarisa booking yazvino\n3️⃣ Ongorora nhoroondo\n4️⃣ Tsvaga ma bookings nezuva\n5️⃣ Tumira dambudziko\n6️⃣ Rubatsiro & Support\n7️⃣ Tarisa balance\n8️⃣ Mutauro\n\nNyora nhamba (1-8) kusarudza!\n\n💡 Nyora 'menu' kudzokera pano!",
-            "booked": lambda slot: f'✅ Wabhuka pa Slot {slot}!\n\n📱 Enda ku "Current Bookings" page kuti uone booking yako.',
+            "booked": lambda slot: f"✅ Wabhuka pa {slot}!\n\n⏰ INOKOSHA: Une masekondi 20 ekupaka mota yako.\n❌ Ukasapaka mukati memasekondi 20, booking yako ichadzimwa otomatiki.",
             "expiry_warn": "⏰ Nguva yapera usati wapinda mu slot.",
             "left_slot": lambda amount: f"🚗 Wabuda pa slot. Wakabhadharwa: ${amount:.2f}.",
             "receipt": lambda data: f"🧾 RECEIPT YE PARKING\n━━━━━━━━━━━━━━━━━━━━\n📍 Slot: {data['slot']}\n🕐 Wakapinda: {data['startTime']}\n🕑 Wabuda: {data['endTime']}\n⏱️ Nguva: {data['duration']}\n💰 Mari: ${data['amount']:.2f}\n💳 Balance: ${data['balance']:.2f}\n━━━━━━━━━━━━━━━━━━━━\n✅ Kubhadhara kwabudirira!\n\nTinokutenda kushandisa Smart Parking! 🚗",
@@ -754,7 +877,7 @@ def twilio_whatsapp_webhook(request):
             "booking_extended": lambda minutes: f"✅ Booking yakawedzerwa neminutes {minutes}!",
             "no_bookings": "📋 Hauna ma bookings.",
             "no_slots": "🚫 Hapana ma slots aripo pari zvino.",
-            "slot_not_available": lambda slot: f"❌ Slot {slot} haina kuwanikwa pari zvino.",
+            "slot_not_available": lambda slot: f"❌ {slot} haina kuwanikwa pari zvino.",
             "reservation_failed": "❌ Kubhuka kwakundikana. Edza zvakare.",
             "system_offline": "⚠️ Haigone kuita izvi IoT system isiri kushanda.",
             "grace_countdown": lambda seconds: f"⏳ {seconds}s yasara mu grace period...",
@@ -770,7 +893,7 @@ def twilio_whatsapp_webhook(request):
         "nd": {
             "greet": "Sawubona! Ngingu Calvin, umsizi weSmart Parking! 🤖",
             "menu": "Ufuna ukwenzani?\n\n1️⃣ Bhuka i-slot\n2️⃣ Bheka i-booking yamanje\n3️⃣ Bukela umlando\n4️⃣ Sesha ama booking ngosuku\n5️⃣ Bika inkinga\n6️⃣ Usizo & Support\n7️⃣ Bheka ibhalansi\n8️⃣ Ulimi\n\nBhala inombolo (1-8) ukukhetha!\n\n💡 Bhala 'menu' ukubuyela lapha!",
-            "booked": lambda slot: f'✅ Ubukhile i-Slot {slot}!\n\n📱 Hamba ku "Current Bookings" page ukubona i-booking yakho.',
+            "booked": lambda slot: f"✅ Ubukhile i-{slot}!\n\n⏰ KUBALULEKILE: Unemizuzwana engu-20 ukubeka imoto yakho.\n❌ Uma ungabeki ngaphakathi kwemizuzwana engu-20, i-booking yakho izocinywa ngokuzenzakalelayo.",
             "expiry_warn": "⏰ Isikhathi siphelile ungakangenisi imoto.",
             "left_slot": lambda amount: f"🚗 Usushiyile i-slot. Ukhokhisiwe: ${amount:.2f}.",
             "receipt": lambda data: f"🧾 I-RECEIPT YE PARKING\n━━━━━━━━━━━━━━━━━━━━\n📍 I-Slot: {data['slot']}\n🕐 Wangena: {data['startTime']}\n🕑 Waphuma: {data['endTime']}\n⏱️ Isikhathi: {data['duration']}\n💰 Imali: ${data['amount']:.2f}\n💳 Ibhalansi: ${data['balance']:.2f}\n━━━━━━━━━━━━━━━━━━━━\n✅ Ukukhokhela kuphumelele!\n\nSiyabonga ukusebenzisa Smart Parking! 🚗",
@@ -786,7 +909,7 @@ def twilio_whatsapp_webhook(request):
             "booking_extended": lambda minutes: f"✅ I-booking yelulwe ngemizuzu engu{minutes}!",
             "no_bookings": "📋 Awunayo ama-booking okwamanje.",
             "no_slots": "🚫 Azikho izindawo ezitholakalayo manje.",
-            "slot_not_available": lambda slot: f"❌ I-Slot {slot} ayitholakali manje.",
+            "slot_not_available": lambda slot: f"❌ I-{slot} ayitholakali manje.",
             "reservation_failed": "❌ Ukubhuka kuhlulekile. Zama futhi.",
             "system_offline": "⚠️ Ngeke kwenziwe lokhu ngoba i-IoT system ayisebenzi.",
             "grace_countdown": lambda seconds: f"⏳ {seconds}s esele ku-grace period...",
@@ -811,13 +934,80 @@ def twilio_whatsapp_webhook(request):
         return val or key
 
     def reply_text(text: str) -> HttpResponse:
-        resp = MessagingResponse()
-        resp.message(text)
-        logger.info(f"📤 Replying with: {text[:100]}")
-        return HttpResponse(str(resp), content_type="application/xml")
+        try:
+            import html
+
+            print(f"📤 Replying with: {text[:100]}")
+
+            # XML escape the text for proper formatting
+            # But MessagingResponse should handle this, so we'll let it do its job
+            if MessagingResponse is None:
+                # Fallback if Twilio library not available - manually escape XML
+                print("⚠️ MessagingResponse is None - using fallback XML")
+                # Escape XML special characters
+                escaped_text = html.escape(text)
+                xml_response = f"<?xml version='1.0' encoding='UTF-8'?><Response><Message>{escaped_text}</Message></Response>"
+                response = HttpResponse(
+                    xml_response.encode("utf-8"),
+                    content_type="application/xml; charset=utf-8",
+                )
+                response.status_code = 200
+                print(
+                    f"✅ Fallback XML response generated (length: {len(xml_response)})"
+                )
+                logger.info(f"✅ Returning fallback XML response to Twilio")
+                return response
+
+            resp = MessagingResponse()
+            resp.message(text)
+            logger.info(f"📤 Replying with: {text[:100]}")
+            response_xml = str(resp)
+            print(f"✅ Response XML generated (length: {len(response_xml)})")
+            print(f"✅ Response XML preview: {response_xml[:300]}")
+
+            # Ensure proper HTTP response with 200 status and UTF-8 encoding
+            http_response = HttpResponse(
+                response_xml.encode("utf-8"),
+                content_type="application/xml; charset=utf-8",
+            )
+            http_response.status_code = 200
+            # Set additional headers to ensure proper delivery
+            http_response["X-Content-Type-Options"] = "nosniff"
+            print(
+                f"✅ HTTP Response created: status={http_response.status_code}, content_type={http_response.get('Content-Type')}"
+            )
+            logger.info(f"✅ Returning TwiML response to Twilio (status 200)")
+            return http_response
+        except Exception as reply_error:
+            print(f"❌ Error in reply_text: {reply_error}")
+            import traceback
+
+            traceback.print_exc()
+            logger.error(f"❌ Error in reply_text: {reply_error}")
+            logger.error(traceback.format_exc())
+
+            # Return minimal valid TwiML with proper escaping
+            import html
+
+            escaped_text = html.escape(text)
+            xml_response = f"<?xml version='1.0' encoding='UTF-8'?><Response><Message>{escaped_text}</Message></Response>"
+            response = HttpResponse(
+                xml_response.encode("utf-8"),
+                content_type="application/xml; charset=utf-8",
+            )
+            response.status_code = 200
+            print(f"✅ Error fallback XML response created (status 200)")
+            return response
 
     def reply_messages(messages: list) -> HttpResponse:
         """Send multiple messages as separate WhatsApp messages"""
+        if MessagingResponse is None:
+            # Fallback if Twilio library not available
+            xml_messages = "".join([f"<Message>{msg}</Message>" for msg in messages])
+            return HttpResponse(
+                f"<?xml version='1.0' encoding='UTF-8'?><Response>{xml_messages}</Response>",
+                content_type="application/xml",
+            )
         resp = MessagingResponse()
         for msg in messages:
             resp.message(msg)
@@ -879,11 +1069,18 @@ def twilio_whatsapp_webhook(request):
 
     try:
         # Log all incoming data for debugging
+        print(f"\n{'='*80}")
+        print(f"🔍 WEBHOOK CALLED - Method: {request.method}")
+        print(f"🔍 POST data: {dict(request.POST)}")
+        print(f"{'='*80}\n")
+
         logger.info(f"🔍 Webhook called - Method: {request.method}")
         logger.info(f"🔍 POST data: {dict(request.POST)}")
 
         # Simple test response for GET requests
         if request.method == "GET":
+            logger.info("📱 GET request received - returning test message")
+            print("📱 GET request received - returning test message")
             return HttpResponse(
                 "WhatsApp webhook is working! Send POST requests from Twilio."
             )
@@ -895,22 +1092,17 @@ def twilio_whatsapp_webhook(request):
         # Log incoming message for debugging
         logger.info(f"📱 WhatsApp message from {from_number}: '{body}'")
         logger.info(f"📱 Body length: {len(body)}, From: {from_number}")
+        print(f"\n{'='*80}")
+        print(f"📱 WhatsApp message received:")
+        print(f"   From: {from_number}")
+        print(f"   Body: '{body}'")
+        print(f"{'='*80}\n")
 
-        # Helper function to get user - check if authenticated first
-        def get_user():
-            # Check if user is authenticated
-            authenticated_user_id = request.session.get(
-                "whatsapp_authenticated_user_id"
-            )
-            if authenticated_user_id:
-                try:
-                    from django.contrib.auth.models import User
-
-                    return User.objects.get(id=authenticated_user_id)
-                except User.DoesNotExist:
-                    pass
-            # Fall back to guest user
-            return get_whatsapp_user(from_number)
+        # Ensure we always have a response
+        if not from_number:
+            logger.warning("⚠️ No 'From' number in request")
+            print("⚠️ ERROR: No 'From' number in request")
+            return reply_text("⚠️ Error: No phone number detected. Please try again.")
 
         # Initialize session if needed
         if "whatsapp_conversation" not in request.session:
@@ -918,6 +1110,7 @@ def twilio_whatsapp_webhook(request):
             request.session["whatsapp_language"] = "en"
             request.session["whatsapp_menu_mode"] = False
             request.session["whatsapp_flow"] = "idle"
+            request.session.save()
 
         if not body:
             # Just show menu
@@ -927,9 +1120,19 @@ def twilio_whatsapp_webhook(request):
             )
 
         # Parse intent using global function
-        intent = parse_whatsapp_intent(body)
+        try:
+            intent = parse_whatsapp_intent(body)
+            print(f"✅ Parsed intent: {intent}")
+        except Exception as parse_error:
+            print(f"❌ Error parsing intent: {parse_error}")
+            import traceback
+
+            traceback.print_exc()
+            intent = {"type": "unknown", "entities": {}}
+
         flow = request.session.get("whatsapp_flow", "idle")
         menu_mode = request.session.get("whatsapp_menu_mode", False)
+        print(f"📊 Flow: {flow}, Menu mode: {menu_mode}")
 
         # Handle greeting and menu - check authentication first
         if intent["type"] == "greet" or body_lower in ("hi", "hello", "menu", "hey"):
@@ -952,8 +1155,15 @@ def twilio_whatsapp_webhook(request):
             msg = f"{t('greet')}\n\n{t('menu')}"
             request.session["whatsapp_menu_mode"] = True
             request.session["whatsapp_flow"] = "idle"
+            request.session.save()  # Ensure session is saved before returning
             logger.info(f"📱 Sending greeting menu: {msg[:100]}")
-            return reply_text(msg)
+            print(f"📱 About to send greeting menu response")
+            response = reply_text(msg)
+            print(
+                f"📱 Response created, status: {response.status_code}, content_type: {response.get('Content-Type', 'N/A')}"
+            )
+            logger.info(f"📱 Response created successfully, returning to Twilio")
+            return response
 
         if "help" in body_lower or is_help(body):
             return reply_text(t("help_message"))
@@ -1021,7 +1231,11 @@ def twilio_whatsapp_webhook(request):
                                             "spot_number", "Unknown"
                                         )
                                         slot_id = slot.get("id", "?")
-                                        msg += f"• {slot_name} (#{slot_id})\n"
+                                        # Format slot name for display
+                                        display_name = format_slot_name_for_display(
+                                            slot_name
+                                        )
+                                        msg += f"• {display_name} (#{slot_id})\n"
                                     msg += f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
                                     return reply_messages([success_msg, msg])
                                 else:
@@ -1051,8 +1265,7 @@ def twilio_whatsapp_webhook(request):
                                 [
                                     success_msg,
                                     f"📋 Current Booking:\n\n"
-                                    f"Slot: {booking.parking_spot.spot_number}\n"
-                                    f"Time Remaining: {minutes}m {seconds}s\n"
+                                    f"Slot: {format_slot_name_for_display(booking.parking_spot.spot_number)}\n"
                                     f"Status: {booking.status}",
                                 ]
                             )
@@ -1074,9 +1287,10 @@ def twilio_whatsapp_webhook(request):
                                     if b.end_time
                                     else "-"
                                 )
-                                msg += (
-                                    f"#{i} {b.parking_spot.spot_number} | {b.status}\n"
+                                display_slot = format_slot_name_for_display(
+                                    b.parking_spot.spot_number
                                 )
+                                msg += f"#{i} {display_slot} | {b.status}\n"
                                 msg += f"Start: {start}\nEnd: {end}\n\n"
                             return reply_messages([success_msg, msg.strip()])
                         elif pending_action == 4:  # Search
@@ -1190,7 +1404,9 @@ def twilio_whatsapp_webhook(request):
                                 "spot_number", "Unknown"
                             )
                             slot_id = slot.get("id", "?")
-                            msg += f"• {slot_name} (#{slot_id})\n"
+                            # Format slot name for display
+                            display_name = format_slot_name_for_display(slot_name)
+                            msg += f"• {display_name} (#{slot_id})\n"
                         msg += "\nType 'book A' or 'book B' to reserve"
 
                         logger.info(f"📱 Sending available slots message: {msg[:100]}")
@@ -1218,9 +1434,11 @@ def twilio_whatsapp_webhook(request):
                             remaining_time = data.get("remaining_time", "0m 0s")
                             status = data.get("status", "active")
 
+                            # Format slot name for display
+                            display_slot = format_slot_name_for_display(slot)
                             return reply_text(
                                 f"📋 Current Booking:\n\n"
-                                f"Slot: {slot}\n"
+                                f"Slot: {display_slot}\n"
                                 f"Time Remaining: {remaining_time}\n"
                                 f"Status: {status}"
                             )
@@ -1286,7 +1504,9 @@ def twilio_whatsapp_webhook(request):
                                 except:
                                     pass
 
-                            msg += f"#{i} Slot {slot} | {status}\n"
+                            # Format slot name for display
+                            display_slot = format_slot_name_for_display(slot)
+                            msg += f"#{i} {display_slot} | {status}\n"
                             msg += f"Start: {start}\nEnd: {end}\n\n"
 
                         logger.info(f"📱 Sending booking history: {msg[:100]}")
@@ -1407,7 +1627,9 @@ def twilio_whatsapp_webhook(request):
                             b.end_time.strftime("%Y-%m-%d %H:%M") if b.end_time else "-"
                         )
                         slot = getattr(b.parking_spot, "spot_number", "Unknown")
-                        msg += f"#{i} Slot {slot} | {b.status}\n"
+                        # Format slot name for display
+                        display_slot = format_slot_name_for_display(slot)
+                        msg += f"#{i} {display_slot} | {b.status}\n"
                         msg += f"Start: {start}\nEnd: {end}\n\n"
 
                     request.session["whatsapp_flow"] = "idle"
@@ -1482,7 +1704,9 @@ def twilio_whatsapp_webhook(request):
                             "spot_number", "Unknown"
                         )
                         slot_id = slot.get("id", "?")
-                        msg += f"• {slot_name} (#{slot_id})\n"
+                        # Format slot name for display
+                        display_name = format_slot_name_for_display(slot_name)
+                        msg += f"• {display_name} (#{slot_id})\n"
                     msg += f"\n{t('tap_to_reserve')}\n\nType 'book A' or 'book B'"
 
                     logger.info(f"📱 Found {len(slots_data)} available slots")
@@ -1583,10 +1807,12 @@ def twilio_whatsapp_webhook(request):
                         existing_slot = current_booking_response.data.get(
                             "slot", "slot"
                         )
-                        return reply_text(
-                            f"⚠️ You already have an active booking for {existing_slot}. "
-                            f"Please complete or cancel it first."
-                        )
+                        # Format slot name for display
+                        display_slot = format_slot_name_for_display(existing_slot)
+                    return reply_text(
+                        f"⚠️ You already have an active booking for {display_slot}. "
+                        f"Please complete or cancel it first."
+                    )
                 except Exception as e:
                     logger.warning(f"Error checking current booking: {e}")
 
@@ -1598,7 +1824,9 @@ def twilio_whatsapp_webhook(request):
                     reserve_response = call_chatbot_api(
                         "reserve",
                         method="POST",
-                        data={"slot_id": spot.id, "duration_minutes": 60},
+                        data={
+                            "slot_id": spot.id
+                        },  # No duration - pay for actual time parked
                     )
 
                     logger.info(
@@ -1616,11 +1844,14 @@ def twilio_whatsapp_webhook(request):
 
                         logger.info(f"📱 Successfully booked {slot_name} via API")
 
+                        # Format slot name for display
+                        display_slot = format_slot_name_for_display(slot_name)
+
                         # End session after booking
                         request.session["whatsapp_active_session"] = False
                         request.session.pop("whatsapp_authenticated_user_id", None)
 
-                        return reply_text(t("booked", slot_name))
+                        return reply_text(t("booked", display_slot))
                     else:
                         # API returned error
                         error_msg = reserve_response.data.get(
@@ -1686,10 +1917,9 @@ def twilio_whatsapp_webhook(request):
                     "📱 Balance check requested but user not authenticated - prompting login"
                 )
                 request.session["whatsapp_flow"] = "login_username"
-                return reply_text(
-                    "🔐 Please login first to check your balance:\n"
-                    "Enter your username:"
-                )
+            return reply_text(
+                "🔐 Please login first to check your balance:\n" "Enter your username:"
+            )
 
             user = get_user()
             profile = UserProfile.objects.get(user=user)
@@ -1702,10 +1932,9 @@ def twilio_whatsapp_webhook(request):
                     "📱 Cancel booking requested but user not authenticated - prompting login"
                 )
                 request.session["whatsapp_flow"] = "login_username"
-                return reply_text(
-                    "🔐 Please login first to cancel your booking:\n"
-                    "Enter your username:"
-                )
+            return reply_text(
+                "🔐 Please login first to cancel your booking:\n" "Enter your username:"
+            )
 
             user = get_user()
             booking = (
@@ -1729,10 +1958,10 @@ def twilio_whatsapp_webhook(request):
                     "📱 History check requested but user not authenticated - prompting login"
                 )
                 request.session["whatsapp_flow"] = "login_username"
-                return reply_text(
-                    "🔐 Please login first to view your booking history:\n"
-                    "Enter your username:"
-                )
+            return reply_text(
+                "🔐 Please login first to view your booking history:\n"
+                "Enter your username:"
+            )
 
             user = get_user()
             bookings = Booking.objects.filter(user=user).order_by("-start_time")[:3]
@@ -1752,32 +1981,67 @@ def twilio_whatsapp_webhook(request):
         # Default fallback
         # If we get here, we didn't handle the message - send fallback
         logger.info(f"📱 No handler found for message: '{body}' - sending fallback")
-        return reply_text(
+        response = reply_text(
             "🤔 Sorry but I didn't understand that. Kindly type in 'menu' to see options or 'hi' to start over!"
         )
+        print(f"📱 Fallback response created, returning to Twilio")
+        return response
 
     except Exception as e:
         # Always return valid TwiML even on error
         import traceback
 
-        # Log the error for debugging
-        logger.error(f"WhatsApp webhook error: {str(e)}")
-        logger.error(traceback.format_exc())
+        # Log the error for debugging - print to console as well
+        error_msg = f"WhatsApp webhook error: {str(e)}"
+        error_trace = traceback.format_exc()
+        logger.error(error_msg)
+        logger.error(error_trace)
+        print(f"\n{'='*80}")
+        print(f"❌ WHATSAPP WEBHOOK ERROR:")
+        print(f"{error_msg}")
+        print(f"{error_trace}")
+        print(f"{'='*80}\n")
 
         # Return a helpful error message in TwiML format
         try:
+            import html
+
+            error_message = "⚠️ Sorry, I encountered an error. Please try again or contact support.\n\nType 'menu' to start over."
+
+            if MessagingResponse is None:
+                # Fallback if Twilio library not available
+                escaped_msg = html.escape(error_message)
+                xml_response = f"<?xml version='1.0' encoding='UTF-8'?><Response><Message>{escaped_msg}</Message></Response>"
+                response = HttpResponse(
+                    xml_response.encode("utf-8"),
+                    content_type="application/xml; charset=utf-8",
+                )
+                response.status_code = 200
+                print(f"✅ Error fallback XML response created (status 200)")
+                return response
+
             resp = MessagingResponse()
-            resp.message(
-                "⚠️ Sorry, I encountered an error. "
-                "Please try again or contact support.\n\n"
-                "Type 'menu' to start over."
+            resp.message(error_message)
+            response_xml = str(resp)
+            http_response = HttpResponse(
+                response_xml.encode("utf-8"),
+                content_type="application/xml; charset=utf-8",
             )
-            return HttpResponse(str(resp), content_type="application/xml")
-        except:
-            # Fallback if MessagingResponse fails
-            return HttpResponse(
-                "<?xml version='1.0' encoding='UTF-8'?>"
-                "<Response><Message>⚠️ Sorry, I encountered an error. "
-                "Please try again or contact support.</Message></Response>",
-                content_type="application/xml",
+            http_response.status_code = 200
+            print(f"✅ Error TwiML response created (status 200)")
+            return http_response
+        except Exception as e2:
+            # Final fallback if everything fails
+            logger.error(f"Error creating error response: {e2}")
+            import html
+
+            error_message = "⚠️ Sorry, I encountered an error. Please try again or contact support.\n\nType 'menu' to start over."
+            escaped_msg = html.escape(error_message)
+            xml_response = f"<?xml version='1.0' encoding='UTF-8'?><Response><Message>{escaped_msg}</Message></Response>"
+            response = HttpResponse(
+                xml_response.encode("utf-8"),
+                content_type="application/xml; charset=utf-8",
             )
+            response.status_code = 200
+            print(f"✅ Final fallback error response created (status 200)")
+            return response
